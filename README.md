@@ -1,6 +1,6 @@
 # Trend Vision One File Security Go SDK User Guide
 
-The Trend Vision One File Security Python SDK empowers developers to craft applications seamlessly integrating with the cloud-based Trend Vision One anti-malware file scanning service. This ensures a thorough scan of data and artifacts within the applications, identifying potential malicious elements.
+The Trend Vision One File Security Go SDK empowers developers to craft applications seamlessly integrating with the cloud-based Trend Vision One anti-malware file scanning service. This ensures a thorough scan of data and artifacts within the applications, identifying potential malicious elements.
 
 This guide outlines the steps to establish your development environment and configure your project, laying the foundation for utilizing the File Security Go SDK effectively.
 

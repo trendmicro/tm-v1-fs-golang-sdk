@@ -1,17 +1,14 @@
-# AMaaS Golang Client SDK User Guide
+# Trend Vision One File Security Go SDK User Guide
 
+The Trend Vision One File Security Python SDK empowers developers to craft applications seamlessly integrating with the cloud-based Trend Vision One anti-malware file scanning service. This ensures a thorough scan of data and artifacts within the applications, identifying potential malicious elements.
 
-The AMaaS Golang Client SDK  allows developers to build applications that interface with cloud-based Cloud One Antimalware Service (AMaaS), so data and artifacts handled by the applications can be scanned to determine whether they are malicious or not.
-
-This guide shows how to set up your dev environment and project before using the AMaaS Golang Client SDK.
+This guide outlines the steps to establish your development environment and configure your project, laying the foundation for utilizing the File Security Go SDK effectively.
 
 ## Environment
 
-- Have a [Trend Cloud One Account](https://cloudone.trendmicro.com). [Sign up for free trial now](https://cloudone.trendmicro.com/trial) if it's not already the case!
-- A [Trend Cloud One API Key](https://cloudone.trendmicro.com/docs/identity-and-account-management/c1-api-key/#new-api-key)
-- A [Trend Cloud One Region](https://cloudone.trendmicro.com/docs/identity-and-account-management/c1-regions/) of choice
 - Golang 1.18 or newer
-- A file or object to be scanned
+- Trend Vision One account with a chosen region - for more information, see the [Trend Vision One documentation](https://docs.trendmicro.com/en-us/enterprise/trend-micro-xdr-help/Home).
+- A Trend Vision One API key with proper role - for more information, see the [Trend Vision One API key documentation](https://docs.trendmicro.com/en-us/enterprise/trend-vision-one/administrative-setti/accountspartfoundati/api-keys.aspx).
 
 ## Installation
 
@@ -21,7 +18,7 @@ To integrate with our service using the Golang SDK, you need to import the SDK p
 
     ```go
     import (
-        "github.com/trendmicro/cloudone-antimalware-golang-sdk/client"
+        "github.com/trendmicro/tm-v1-fs-golang-sdk/client"
         // Other imports...
     )
     ```
@@ -29,12 +26,25 @@ To integrate with our service using the Golang SDK, you need to import the SDK p
 3. Use `go get` to download the SDK package:
 
     ```sh
-    go get github.com/trendmicro/cloudone-antimalware-golang-sdk
+    go get github.com/trendmicro/tm-v1-fs-golang-sdk
     ```
 
 4. You can now start using the SDK in your project.
 
----
+## Obtain an API Key
+
+The File Security SDK requires a valid API Key provided as parameter to the SDK client object. It can accept Trend Vision One API keys. 
+
+When obtaining the API Key, ensure that the API Key is associated with the region that you plan to use. It is important to note that Trend Vision One API Keys are associated with different regions, please refer to the region flag below to obtain a better understanding of the valid regions associated with the respective API Key.
+
+If you plan on using a Trend Vision One region, be sure to pass in region parameter when running custom program with File Security SDK to specify the region of that API key and to ensure you have proper authorization. The list of supported Trend Vision One regions can be found at API Reference section below.
+
+1. Login to the Trend Vision One.
+2. Create a new Trend Vision One API key:
+
+* Navigate to the Trend Vision One User Roles page.
+* Verify that there is a role with the "Run file scan via SDK" permissions enabled. If not, create a role by clicking on "Add Role" and "Save" once finished.
+* Directly configure a new key on the Trend Vision One API Keys page, using the role which contains the "Run file scan via SDK" permission. It is advised to set an expiry time for the API key and make a record of it for future reference.
 
 ## Initialization
 
@@ -56,8 +66,8 @@ Replace "YOUR_API_KEY_OR_TOKEN" and "YOUR_REGION" with your actual API key or to
 
 | Parameter     | Description                                                                              |
 | ------------- | ---------------------------------------------------------------------------------------- |
-| region        | The region you obtained your api key.  Value provided must be one of the Cloud One regions, e.g. `us-1`, `in-1`, `de-1`, `sg-1`, `au-1`, `jp-1`, `gb-1`, `ca-1`, etc. |
-| apikey        | Your own Cloud One API Key.                                                              |
+| region        | The region you obtained your api key.  Value provided must be one of the Vision One regions, e.g. `us-east-1`, `eu-central-1`, `ap-northeast-1`, `ap-southeast-2`, `ap-southeast-1`, etc. |
+| apikey        | Your own Vision One API Key.                                                              |
 
 ## Basic Usage
 
@@ -143,7 +153,7 @@ As examples, you can find two important files in the `tools/` directory of the S
 
 You can refer to these files for a deeper understanding of how to integrate and use the SDK with our service.
 
-## Usage Instructions for Cloud One VSAPI Client Programs
+## Usage Instructions for File Security SDK Programs
 
 ### Prerequisites
 Build the client tools requires the following:

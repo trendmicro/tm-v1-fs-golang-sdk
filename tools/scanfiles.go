@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	amaasclient "github.com/trendmicro/cloudone-antimalware-golang-sdk/client"
+	amaasclient "github.com/trendmicro/tm-v1-fs-golang-sdk/client"
 )
 
 /*
@@ -31,7 +31,7 @@ type ScanResult struct {
 	EndTime    time.Time `json:"scan_endtime"`
 	Test       string    `json:"test"`
 	TestPassed bool      `json:"test_passed"`
-	Data       string    `json:"data`
+	Data       string    `json:"data"`
 }
 
 type OverallTestResult struct {
@@ -68,7 +68,7 @@ func main() {
 	var err error
 
 	if region != "" && grpcAddr != "" {
-		log.Fatalf("Both region and addr are specified. Please specify only one.")
+		log.Fatal("Both region and addr are specified. Please specify only one.")
 	} else if region != "" {
 		ac, err = amaasclient.NewClient(apiKey, region)
 		if err != nil {
@@ -80,7 +80,7 @@ func main() {
 			log.Fatalf("Unable to create AMaaS scan client object. error: %v", err)
 		}
 	} else {
-		log.Fatalf("Neither region nor addr is specified. Please specify one.")
+		log.Fatal("Neither region nor addr is specified. Please specify one.")
 	}
 
 	if path == "" {
@@ -89,7 +89,7 @@ func main() {
 
 	fileInfo, err := os.Stat(path)
 	if err != nil {
-		log.Fatalf("The path %s does not appear to be a valid one.")
+		log.Fatalf("The path %s does not appear to be a valid one.", path)
 	}
 
 	if fileInfo.IsDir() {
@@ -147,9 +147,9 @@ func scanFileListInSequence(fileList []string, scanGoodFiles bool, scanner *amaa
 
 		sr.StartTime = time.Now()
 
-		jsonResult, err := scanner.ScanFile(fileList[i])
+		jsonResult, err := scanner.ScanFile(fileList[i], nil)
 		if err != nil {
-			log.Printf(err.Error())
+			log.Print(err.Error())
 		}
 
 		sr.EndTime = time.Now()
@@ -186,9 +186,9 @@ func scanFileListInParallel(fileList []string, scanGoodFiles bool, scanner *amaa
 
 			sr.StartTime = time.Now()
 
-			jsonResult, err := scanner.ScanFile(f)
+			jsonResult, err := scanner.ScanFile(f, nil)
 			if err != nil {
-				log.Printf(err.Error())
+				log.Print(err.Error())
 			}
 
 			sr.EndTime = time.Now()

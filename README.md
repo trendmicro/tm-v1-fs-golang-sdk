@@ -33,7 +33,7 @@ To integrate with our service using the Golang SDK, you need to import the SDK p
 
 ## Obtain an API Key
 
-The File Security SDK requires a valid API Key provided as parameter to the SDK client object. It can accept Trend Vision One API keys. 
+The File Security SDK requires a valid API Key provided as parameter to the SDK client object. It can accept Trend Vision One API keys.
 
 When obtaining the API Key, ensure that the API Key is associated with the region that you plan to use. It is important to note that Trend Vision One API Keys are associated with different regions, please refer to the region flag below to obtain a better understanding of the valid regions associated with the respective API Key.
 
@@ -77,8 +77,9 @@ Once you have initialized the SDK, you can start using it to interact with our s
 
 ```go
 filePath := "path/to/your/file.txt"
+tags := []string{"tag1", "tag2"}
 
-response, err := client.ScanFile(filePath)
+response, err := client.ScanFile(filePath, tags)
 if err != nil {
     // Handle scanning error
     panic(err)
@@ -92,8 +93,9 @@ if err != nil {
 ```go
 data := []byte("Your data to be scanned")
 identifier := "UniqueIdentifier"
+tags := []string{"tag1", "tag2"}
 
-response, err := client.ScanBuffer(data, identifier)
+response, err := client.ScanBuffer(data, identifier, tags)
 if err != nil {
     // Handle scanning error
     panic(err)
@@ -102,27 +104,9 @@ if err != nil {
 // Use the 'response' as needed
 ```
 
-## Advanced Configuration
+**_Note_**
+- Max number of tags is 8. And the length of each tag can't exceed 63.
 
-The SDK provides additional configuration options and functions that you can use to customize its behavior. Here are some advanced configuration options:
-
-### Getting Timeout Setting
-
-You can retrieve the current timeout setting:
-
-```go
-timeout := client.GetTimeoutSetting()
-fmt.Printf("Current Timeout Setting: %d seconds\n", timeout)
-```
-
-### Getting Connection and Authentication Context
-
-You can access the underlying gRPC connection and authentication context:
-
-```go
-conn := client.GetConnection() // Get the gRPC connection
-ctx := client.ConfigAuth(context.Background()) // Get the authentication context
-```
 ## Additional Functions
 
 The SDK provides additional functions for advanced usage, such as dumping the configuration and cleaning up resources:
@@ -172,20 +156,20 @@ This program is located in the `tools/` folder. It supports the gRPC-based serve
 
 The following flags are supported:
 
-  `-tls`
-        Specify to enable server authentication by client for gRPC
+`-tls`
+Specify to enable server authentication by client for gRPC
 
-  `-region <string>`
-        Specify the region to connect to for gRPC
+`-region <string>`
+Specify the region to connect to for gRPC
 
-  `-addr <string>`
-        the address to connect to for gRPC (default "localhost:50051")
+`-addr <string>`
+the address to connect to for gRPC (default "localhost:50051")
 
-  `-filename <string>`
-        Path of file to scan
+`-filename <string>`
+Path of file to scan
 
-  `-apikey <string>`
-        API key for service authentication if authentication is enabled
+`-apikey <string>`
+API key for service authentication if authentication is enabled
 
 ### scanfiles
 
@@ -195,23 +179,23 @@ If `-good` flag is specified, it indicates the files to be scanned are non-malic
 
 The following flags are supported by the program:
 
-  `-path <string>`
-        Directory or file to scan. This flag must be specified in all scenarios.
+`-path <string>`
+Directory or file to scan. This flag must be specified in all scenarios.
 
-  `-good`
-        Specify if scanning good/non-malicious files.
+`-good`
+Specify if scanning good/non-malicious files.
 
-  `-parallel`
-        Specify if scanning of multiple files should be carried out simultaneously instead of sequentially.
+`-parallel`
+Specify if scanning of multiple files should be carried out simultaneously instead of sequentially.
 
-  `-tls`
-        Specify to enable server authentication by client for gRPC
+`-tls`
+Specify to enable server authentication by client for gRPC
 
-  `-region <string>`
-        Specify the region to connect to for gRPC
+`-region <string>`
+Specify the region to connect to for gRPC
 
-  `-addr <string>`
-        The address to connect to for gRPC (default "localhost:50051")
+`-addr <string>`
+The address to connect to for gRPC (default "localhost:50051")
 
-  `-apikey <string>`
-        API key for service authentication if authentication is enabled
+`-apikey <string>`
+API key for service authentication if authentication is enabled

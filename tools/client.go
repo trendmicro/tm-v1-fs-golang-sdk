@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	amaasclient "github.com/trendmicro/cloudone-antimalware-golang-sdk/client"
+	amaasclient "github.com/trendmicro/tm-v1-fs-golang-sdk/client"
 )
 
 var (
@@ -23,7 +23,7 @@ func main() {
 	var err error
 
 	if *region != "" && *addr != "" {
-		log.Fatalf("Both region and addr are specified. Please specify only one.")
+		log.Fatal("Both region and addr are specified. Please specify only one.")
 	} else if *region != "" {
 		client, err = amaasclient.NewClient(*apiKey, *region)
 		if err != nil {
@@ -35,10 +35,10 @@ func main() {
 			log.Fatalf("Unable to create AMaaS scan client object. error: %v", err)
 		}
 	} else {
-		log.Fatalf("Neither region nor addr is specified. Please specify one.")
+		log.Fatal("Neither region nor addr is specified. Please specify one.")
 	}
 
-	result, err := client.ScanFile(*fileName)
+	result, err := client.ScanFile(*fileName, nil)
 	if err != nil {
 		log.Fatalf(err.Error())
 	}

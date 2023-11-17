@@ -46,19 +46,7 @@ func TestCheckAuthKeyEmptyWithOverride(t *testing.T) {
 	assert.Equal(t, "", key)
 }
 
-const someInvalidKey = "eyblahblahblah.eydsfdfdfdf.EYhhhhhhhhhhhhhh"
-const someAPIKey = "tmcfakeapikey"
-
-func TestCheckAuthKeyNonEmptyInvalid(t *testing.T) {
-
-	os.Setenv(_envvarAuthKey, "")
-	os.Setenv(_envvarAuthKeyNotRequired, "")
-
-	key, err := checkAuthKey(someInvalidKey)
-
-	assert.NotNil(t, err)
-	assert.Equal(t, "", key)
-}
+const someAPIKey = "tmcmockapikey"
 
 func TestCheckAuthKeyNonEmptyValidAPIKey(t *testing.T) {
 
@@ -112,13 +100,13 @@ func TestCheckAuthKeyNonEmptyEnvVarOverride(t *testing.T) {
 
 func TestGetServiceFQDNEmpty(t *testing.T) {
 
-	fqdn := getServiceFQDN("")
+	fqdn, _ := getServiceFQDN("")
 	assert.Equal(t, "", fqdn)
 }
 
 func TestGetServiceFQDNGarbage(t *testing.T) {
 
-	fqdn := getServiceFQDN("blah blah okay")
+	fqdn, _ := getServiceFQDN("blah blah okay")
 	assert.Equal(t, "", fqdn)
 }
 
@@ -137,7 +125,29 @@ func TestGetServiceFQDNMapping(t *testing.T) {
 
 	for _, region := range inputs {
 		expected := fmt.Sprintf("antimalware.%s.cloudone.trendmicro.com", region)
-		fqdn := getServiceFQDN(region)
+		fqdn, _ := getServiceFQDN(region)
+
+		assert.Equal(t, expected, fqdn)
+	}
+}
+
+func TestGetServiceFQDNMappingVisionOne(t *testing.T) {
+
+	var inputs = map[string]string{
+		"us-1": "us-east-1",
+		"in-1": "ap-south-1",
+		"de-1": "eu-central-1",
+		"sg-1": "ap-southeast-1",
+		"au-1": "ap-southeast-2",
+		"jp-1": "ap-northeast-1",
+		// "gb-1": "",
+		// "ca-1": "",
+		// "trend-us-1": "",
+	}
+
+	for c1, v1 := range inputs {
+		expected := fmt.Sprintf("antimalware.%s.cloudone.trendmicro.com", c1)
+		fqdn, _ := getServiceFQDN(v1)
 
 		assert.Equal(t, expected, fqdn)
 	}
@@ -182,9 +192,9 @@ func TestIdServerAddressValid(t *testing.T) {
 
 	os.Setenv(_envvarServerAddr, "")
 
-	addr, err := identifyServerAddr("us-1")
-
-	expected := fmt.Sprintf("%s:%d", getServiceFQDN("us-1"), _defaultCommPort)
+	addr, err := identifyServerAddr("us-east-1")
+	fqdn, _ := getServiceFQDN("us-east-1")
+	expected := fmt.Sprintf("%s:%d", fqdn, _defaultCommPort)
 
 	assert.Nil(t, err)
 	assert.Equal(t, expected, addr)
@@ -195,7 +205,7 @@ func TestIdServerAddressValidWithOverride(t *testing.T) {
 	const testAddr = "this.is.a.fake.server.address:123"
 	os.Setenv(_envvarServerAddr, testAddr)
 
-	addr, err := identifyServerAddr("us-1")
+	addr, err := identifyServerAddr("us-east-1")
 
 	assert.Nil(t, err)
 	assert.Equal(t, testAddr, addr)
@@ -250,13 +260,13 @@ func TestGetDefaultScanTimeoutWithOverride(t *testing.T) {
 
 	os.Setenv(_envvarScanTimeoutSecs, "what-the-heck")
 
-	timeout, err := getDefaultScanTimeout()
+	_, err := getDefaultScanTimeout()
 
 	assert.NotNil(t, err)
 
 	os.Setenv(_envvarScanTimeoutSecs, "1000")
 
-	timeout, err = getDefaultScanTimeout()
+	timeout, err := getDefaultScanTimeout()
 
 	assert.Nil(t, err)
 	assert.Equal(t, 1000, timeout)
@@ -432,8 +442,28 @@ func TestBufferClientSha256(t *testing.T) {
 	data := []byte("dummy")
 	client, _ := InitBufferReader(data, "test")
 	assert.NotNil(t, client)
-	r, _ := client.Hash()
+	r, _ := client.Hash("sha256")
 	assert.NotEmpty(t, r)
+}
+
+func TestBufferClientSha1(t *testing.T) {
+
+	data := []byte("dummy")
+	client, _ := InitBufferReader(data, "test")
+	assert.NotNil(t, client)
+	r, _ := client.Hash("sha1")
+	assert.NotEmpty(t, r)
+}
+
+func TestFileClientSha1WithUnsupportedAlgo(t *testing.T) {
+
+	data := []byte("dummy")
+	client, _ := InitBufferReader(data, "test")
+	assert.NotNil(t, client)
+	r, err := client.Hash("sha224")
+	assert.Empty(t, r)
+	assert.NotNil(t, err)
+	assert.Error(t, err, "Unsupported algorithm for calculating the hash: sha224")
 }
 
 func TestFileClientSha256(t *testing.T) {
@@ -441,8 +471,28 @@ func TestFileClientSha256(t *testing.T) {
 	file_path, _ := os.Executable()
 	client, _ := InitFileReader(file_path)
 	assert.NotNil(t, client)
-	r, _ := client.Hash()
+	r, _ := client.Hash("sha256")
+	assert.NotEmpty(t, r)
+}
+
+func TestFileClientSha1(t *testing.T) {
+
+	file_path, _ := os.Executable()
+	client, _ := InitFileReader(file_path)
+	assert.NotNil(t, client)
+	r, _ := client.Hash("sha1")
+	assert.NotEmpty(t, r)
+}
+
+func TestFileClientSha256WithUnsupportedAlgo(t *testing.T) {
+
+	file_path, _ := os.Executable()
+	client, _ := InitFileReader(file_path)
+	assert.NotNil(t, client)
+	r, err := client.Hash("sha224")
 	assert.Empty(t, r)
+	assert.NotNil(t, err)
+	assert.Error(t, err, "Unsupported algorithm for calculating the hash: sha224")
 }
 
 func TestCheckAuthKey(t *testing.T) {
@@ -465,9 +515,15 @@ func TestCheckAuthKey(t *testing.T) {
 			expectedError:  false,
 		},
 		{
-			testCase:       "invalid key",
-			input:          "Dummy",
-			expectedResult: "Dummy",
+			testCase:       "any key",
+			input:          "Dummy key",
+			expectedResult: "Dummy key",
+			expectedError:  false,
+		},
+		{
+			testCase:       "empty key",
+			input:          "",
+			expectedResult: "",
 			expectedError:  true,
 		},
 	}

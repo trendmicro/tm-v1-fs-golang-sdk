@@ -2,19 +2,21 @@ package client
 
 import (
 	"context"
+	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/tls"
-	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"log"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/exp/slices"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -23,7 +25,7 @@ import (
 	gmd "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	pb "github.com/trendmicro/cloudone-antimalware-golang-sdk/client/base"
+	pb "github.com/trendmicro/tm-v1-fs-golang-sdk/client/base"
 )
 
 const (
@@ -31,6 +33,12 @@ const (
 	_envvarServerAddr         = "TM_AM_SERVER_ADDR"           // <host FQDN>:<port no>
 	_envvarDisableTLS         = "TM_AM_DISABLE_TLS"           // Set to 1 to not use TLS for client-server communication; set to 0 or leave empty otherwise.
 	_envvarDisableCertVerify  = "TM_AM_DISABLE_CERT_VERIFY"   // Set to 1 to not disable server certificate check by client; set to 0 or leave empty otherwise.
+
+	appNameHTTPHeader = "tm-app-name"
+	appNameV1FS       = "V1FS"
+
+	maxTagsListSize = 8
+	maxTagSize      = 63
 )
 
 type LogLevel int
@@ -50,7 +58,7 @@ type AmaasClientReader interface {
 	DataSize() (int64, error)
 	ReadBytes(offset int64, length int32) ([]byte, error)
 	Close()
-	Hash() (string, error)
+	Hash(algorithm string) (string, error)
 }
 
 // File reader implementation
@@ -90,9 +98,25 @@ func (reader *AmaasClientFileReader) DataSize() (int64, error) {
 	return fi.Size(), nil
 }
 
-func (reader *AmaasClientFileReader) Hash() (string, error) {
-	//TODO
-	return "", nil
+func (reader *AmaasClientFileReader) Hash(algorithm string) (string, error) {
+	var h hash.Hash
+
+	switch strings.ToLower(algorithm) {
+	case "sha256":
+		h = sha256.New()
+	case "sha1":
+		h = sha1.New()
+	default:
+		return "", fmt.Errorf(MSG("MSG_ID_ERR_UNSUPPORTED_ALGORITHM"), algorithm)
+	}
+
+	if _, err := io.Copy(h, reader.fd); err != nil {
+		return "", err
+	}
+
+	hashValue := hex.EncodeToString(h.Sum(nil))
+
+	return fmt.Sprintf("%s:%s", algorithm, hashValue), nil
 }
 
 func (reader *AmaasClientFileReader) ReadBytes(offset int64, length int32) ([]byte, error) {
@@ -161,16 +185,25 @@ func (reader *AmaasClientBufferReader) Close() {
 }
 
 // return hash value of buffer
-func (reader *AmaasClientBufferReader) Hash() (string, error) {
+func (reader *AmaasClientBufferReader) Hash(algorithm string) (string, error) {
+	var h hash.Hash
 
-	//computer file hash
-	h := sha256.New()
-	_, err := h.Write(reader.buffer)
-	if err != nil {
+	switch strings.ToLower(algorithm) {
+	case "sha256":
+		h = sha256.New()
+	case "sha1":
+		h = sha1.New()
+	default:
+		return "", fmt.Errorf(MSG("MSG_ID_ERR_UNSUPPORTED_ALGORITHM"), algorithm)
+	}
+
+	if _, err := h.Write(reader.buffer); err != nil {
 		return "", err
 	}
+
 	hashValue := hex.EncodeToString(h.Sum(nil))
-	return "sha256:" + hashValue, nil
+
+	return fmt.Sprintf("%s:%s", algorithm, hashValue), nil
 }
 
 ///////////////////////////////////////
@@ -180,23 +213,32 @@ func (reader *AmaasClientBufferReader) Hash() (string, error) {
 ///////////////////////////////////////
 
 type AmaasClient struct {
-	conn        *grpc.ClientConn
-	isC1Token   bool
-	authKey     string
-	addr        string
-	useTLS      bool
-	verifyCert  bool
-	timeoutSecs int
-
-	archHandler AmaasClientArchiveHandler
+	conn         *grpc.ClientConn
+	isC1Token    bool
+	authKey      string
+	addr         string
+	useTLS       bool
+	verifyCert   bool
+	timeoutSecs  int
+	disableCache bool
+	appName      string
+	archHandler  AmaasClientArchiveHandler
 }
 
-func scanRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, dataReader AmaasClientReader) (string, error) {
+func scanRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, dataReader AmaasClientReader, disableCache bool, tags []string) (string, error) {
 
 	defer cancel()
 
 	var stream pb.Scan_RunClient
 	var err error
+	var hashSha256 string
+
+	// Validate the tags parameter
+	if tags != nil {
+		if err := validateTags(tags); err != nil {
+			return "", err
+		}
+	}
 
 	// Where certificate and connections related checks first happen, so many different
 	// error conditions can be returned here.
@@ -206,11 +248,22 @@ func scanRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, da
 		return makeFailedScanJSONResp(), sanitizeGRPCError(err)
 	}
 
-	defer stream.CloseSend()
+	defer func(stream pb.Scan_RunClient) {
+		err := stream.CloseSend()
+		if err != nil {
+			panic(err)
+		}
+	}(stream)
 
 	size, _ := dataReader.DataSize()
-	hashVal, _ := dataReader.Hash()
-	if err = runInitRequest(stream, dataReader.Identifier(), int32(size), hashVal); err != nil {
+
+	if !disableCache {
+		hashSha256, _ = dataReader.Hash("sha256")
+	}
+
+	hashSha1, _ := dataReader.Hash("sha1")
+
+	if err = runInitRequest(stream, dataReader.Identifier(), int32(size), hashSha256, hashSha1, tags); err != nil {
 		return makeFailedScanJSONResp(), err
 	}
 
@@ -226,10 +279,10 @@ func scanRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, da
 	return result, nil
 }
 
-func runInitRequest(stream pb.Scan_RunClient, identifier string, dataSize int32, hash string) error {
+func runInitRequest(stream pb.Scan_RunClient, identifier string, dataSize int32, hashSha256 string, hashSha1 string, tags []string) error {
 
 	if err := stream.Send(&pb.C2S{Stage: pb.Stage_STAGE_INIT,
-		FileName: identifier, RsSize: dataSize, FileSha256: hash}); err != nil {
+		FileName: identifier, RsSize: dataSize, FileSha256: hashSha256, FileSha1: hashSha1, Tags: tags}); err != nil {
 		err = sanitizeGRPCError(err)
 		logMsg(LogLevelError, MSG("MSG_ID_ERR_INIT"), err)
 		return err
@@ -312,10 +365,10 @@ func runUploadLoop(stream pb.Scan_RunClient, dataReader AmaasClientReader) (resu
 	return
 }
 
-func (ac *AmaasClient) bufferScanRun(buffer []byte, identifier string) (string, error) {
+func (ac *AmaasClient) bufferScanRun(buffer []byte, identifier string, tags []string) (string, error) {
 
 	if ac.conn == nil {
-		return "", errors.New(MSG("MSG_ID_ERR_CLIENT_NOT_READY"))
+		return "", makeInternalError(MSG("MSG_ID_ERR_CLIENT_NOT_READY"))
 	}
 
 	bufferReader, err := InitBufferReader(buffer, identifier)
@@ -328,23 +381,25 @@ func (ac *AmaasClient) bufferScanRun(buffer []byte, identifier string) (string, 
 
 	ctx = ac.buildAuthContext(ctx)
 
-	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), bufferReader)
+	ctx = ac.buildAppNameContext(ctx)
+
+	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), bufferReader, ac.disableCache, tags)
 }
 
-func (ac *AmaasClient) fileScanRun(fileName string) (string, error) {
+func (ac *AmaasClient) fileScanRun(fileName string, tags []string) (string, error) {
 
 	if ac.conn == nil {
-		return "", errors.New(MSG("MSG_ID_ERR_CLIENT_NOT_READY"))
+		return "", makeInternalError(MSG("MSG_ID_ERR_CLIENT_NOT_READY"))
 	}
 
 	if ac.archHandler.archHandlingEnabled() {
 		return ac.archHandler.fileScanRun(fileName)
 	}
 
-	return ac.fileScanRunNormalFile(fileName)
+	return ac.fileScanRunNormalFile(fileName, tags)
 }
 
-func (ac *AmaasClient) fileScanRunNormalFile(fileName string) (string, error) {
+func (ac *AmaasClient) fileScanRunNormalFile(fileName string, tags []string) (string, error) {
 
 	fileReader, err := InitFileReader(fileName)
 	if err != nil {
@@ -356,7 +411,9 @@ func (ac *AmaasClient) fileScanRunNormalFile(fileName string) (string, error) {
 
 	ctx = ac.buildAuthContext(ctx)
 
-	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), fileReader)
+	ctx = ac.buildAppNameContext(ctx)
+
+	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), fileReader, ac.disableCache, tags)
 }
 
 func (ac *AmaasClient) setupComm() error {
@@ -387,12 +444,20 @@ func (ac *AmaasClient) buildAuthContext(ctx context.Context) context.Context {
 		if ac.isC1Token {
 			newCtx = gmd.AppendToOutgoingContext(ctx, "Authorization", fmt.Sprintf("Bearer %s", ac.authKey))
 		} else {
-			if isExplictAPIKey(ac.authKey) {
+			if isExplicitAPIKey(ac.authKey) {
 				newCtx = gmd.AppendToOutgoingContext(ctx, "Authorization", ac.authKey)
 			} else {
 				newCtx = gmd.AppendToOutgoingContext(ctx, "Authorization", fmt.Sprintf("ApiKey %s", ac.authKey))
 			}
 		}
+	}
+	return newCtx
+}
+
+func (ac *AmaasClient) buildAppNameContext(ctx context.Context) context.Context {
+	newCtx := ctx
+	if len(ac.appName) > 0 {
+		newCtx = gmd.AppendToOutgoingContext(ctx, appNameHTTPHeader, ac.appName)
 	}
 	return newCtx
 }
@@ -416,59 +481,51 @@ func checkAuthKey(authKey string) (string, error) {
 	envAuthKey := os.Getenv(_envvarAuthKey)
 
 	if authKey == "" && envAuthKey == "" {
-		return "", errors.New(MSG("MSG_ID_ERR_MISSING_AUTH"))
+		return "", makeInternalError(MSG("MSG_ID_ERR_MISSING_AUTH"))
 	} else if envAuthKey != "" {
 		auth = envAuthKey
 	}
-
-	isToken := isC1Token(auth)
-	isKey := isC1APIKey(auth)
-
-	if !isToken && !isKey {
-		return "", errors.New(MSG("MSG_ID_ERR_INVALID_AUTH"))
-	} else if isToken && isKey {
-		return "", errors.New(MSG("MSG_ID_ERR_UNKNOWN_AUTH"))
-	}
-
 	return auth, nil
 }
-func isExplictAPIKey(auth string) bool {
-	if strings.HasPrefix(strings.ToLower(auth), "apikey") {
-		return true
-	}
-	return false
+
+func isExplicitAPIKey(auth string) bool {
+	return strings.HasPrefix(strings.ToLower(auth), "apikey")
 }
 
 func isC1Token(auth string) bool {
 
-	if isExplictAPIKey(auth) {
-		return false
-	}
+	//for now, we may only support apikey, not customer token or service token
+	return false
 
-	keySplitted := strings.Split(auth, ".")
-	if len(keySplitted) != 3 { // The JWT should contain three parts
-		return false
-	}
+	// if isExplicitAPIKey(auth) {
+	// 	return false
+	// }
 
-	jsonFirstPart, err := base64.StdEncoding.DecodeString(keySplitted[0])
-	if err != nil {
-		return false
-	}
+	// keySplitted := strings.Split(auth, ".")
+	// if len(keySplitted) != 3 { // The JWT should contain three parts
+	// 	return false
+	// }
 
-	var firstPart struct {
-		Alg string `json:"alg"`
-	}
-	err = json.Unmarshal(jsonFirstPart, &firstPart)
-	if err != nil || firstPart.Alg == "" { // The first part should have the attribute "alg"
-		return false
-	}
+	// jsonFirstPart, err := base64.StdEncoding.DecodeString(keySplitted[0])
+	// if err != nil {
+	// 	return false
+	// }
 
-	return true
+	// var firstPart struct {
+	// 	Alg string `json:"alg"`
+	// }
+	// err = json.Unmarshal(jsonFirstPart, &firstPart)
+	// if err != nil || firstPart.Alg == "" { // The first part should have the attribute "alg"
+	// 	return false
+	// }
+
+	// return true
 }
 
-func isC1APIKey(auth string) bool {
-	return strings.HasPrefix(auth, "tmc") || isExplictAPIKey(auth)
-}
+// deprecated
+// func isC1APIKey(auth string) bool {
+// 	return strings.HasPrefix(auth, "tmc") || isExplicitAPIKey(auth)
+// }
 
 func identifyServerAddr(region string) (string, error) {
 	envOverrideAddr := os.Getenv(_envvarServerAddr)
@@ -477,9 +534,9 @@ func identifyServerAddr(region string) (string, error) {
 		return envOverrideAddr, nil
 	}
 
-	fqdn := getServiceFQDN(region)
-	if fqdn == "" {
-		return "", errors.New(fmt.Sprintf(MSG("MSG_ID_ERR_INVALID_REGION"), region))
+	fqdn, err := getServiceFQDN(region)
+	if err != nil {
+		return "", err
 	}
 
 	return fmt.Sprintf("%s:%d", fqdn, _defaultCommPort), nil
@@ -497,7 +554,7 @@ func getDefaultScanTimeout() (int, error) {
 
 	if envScanTimeoutSecs != "" {
 		if val, err := strconv.Atoi(envScanTimeoutSecs); err != nil {
-			return 0, errors.New(fmt.Sprintf(MSG("MSG_ID_ERR_ENVVAR_PARSING"), _envvarScanTimeoutSecs))
+			return 0, fmt.Errorf(MSG("MSG_ID_ERR_ENVVAR_PARSING"), _envvarScanTimeoutSecs)
 		} else {
 			return val, nil
 		}
@@ -506,24 +563,40 @@ func getDefaultScanTimeout() (int, error) {
 	return _defaultTimeoutSecs, nil
 }
 
-func getServiceFQDN(targetRegion string) string {
+func getServiceFQDN(targetRegion string) (string, error) {
 
-	const mappingJSON = `{
-		"us-1": "antimalware.us-1.cloudone.trendmicro.com",
-		"in-1": "antimalware.in-1.cloudone.trendmicro.com",
-		"de-1": "antimalware.de-1.cloudone.trendmicro.com",
-		"sg-1": "antimalware.sg-1.cloudone.trendmicro.com",
-		"au-1": "antimalware.au-1.cloudone.trendmicro.com",
-		"jp-1": "antimalware.jp-1.cloudone.trendmicro.com",
-		"gb-1": "antimalware.gb-1.cloudone.trendmicro.com",
-		"ca-1": "antimalware.ca-1.cloudone.trendmicro.com"
-		}`
+	// ensure the region exists in v1 or c1
+	region := targetRegion
+	if !slices.Contains(AllRegions, region) {
+		return "", fmt.Errorf(MSG("MSG_ID_ERR_INVALID_REGION"), region, AllRegions)
+	}
+	// if it is a V1 region, map it to a C1 region
+	if slices.Contains(V1Regions, region) {
+		regionClone := ""
+		exists := false
+		// Make sure the v1 region is part of the cloudone.SupportedV1Regions and cloudone.V1ToC1RegionMapping lists
+		if regionClone, exists = V1ToC1RegionMapping[region]; !exists || !slices.Contains(SupportedV1Regions, region) {
+			return "", fmt.Errorf(MSG("MSG_ID_ERR_INVALID_REGION"), region, AllRegions)
+		}
+		region = regionClone
+	}
 
-	mapping := map[string]string{}
-	json.Unmarshal([]byte(mappingJSON), &mapping)
+	mapping := map[string]string{
+		C1_US_REGION: "antimalware.us-1.cloudone.trendmicro.com",
+		C1_IN_REGION: "antimalware.in-1.cloudone.trendmicro.com",
+		C1_DE_REGION: "antimalware.de-1.cloudone.trendmicro.com",
+		C1_SG_REGION: "antimalware.sg-1.cloudone.trendmicro.com",
+		C1_AU_REGION: "antimalware.au-1.cloudone.trendmicro.com",
+		C1_JP_REGION: "antimalware.jp-1.cloudone.trendmicro.com",
+		C1_GB_REGION: "antimalware.gb-1.cloudone.trendmicro.com",
+		C1_CA_REGION: "antimalware.ca-1.cloudone.trendmicro.com",
+	}
 
-	fqdn := mapping[targetRegion]
-	return fqdn
+	fqdn, exists := mapping[region]
+	if !exists {
+		return "", fmt.Errorf(MSG("MSG_ID_ERR_INVALID_REGION"), region, AllRegions)
+	}
+	return fqdn, nil
 }
 
 //////////////////////////////////////
@@ -629,7 +702,7 @@ func sanitizeGRPCError(err error) error {
 	// The gRPC framework will generate this error code when the deadline is
 	// exceeded.
 	case codes.DeadlineExceeded:
-
+		return status.Error(st.Code(), MSG("MSG_ID_ERR_TIMEOUT"))
 	// NotFound means some requested entity (e.g., file or directory) was
 	// not found.
 	//
@@ -793,6 +866,8 @@ func NewClientInternal(key string, addr string, useTLS bool) (*AmaasClient, erro
 	ac.useTLS = useTLS
 	ac.verifyCert = false
 
+	ac.appName = appNameV1FS
+
 	var err error
 
 	if ac.timeoutSecs, err = getDefaultScanTimeout(); err != nil {
@@ -808,4 +883,28 @@ func NewClientInternal(key string, addr string, useTLS bool) (*AmaasClient, erro
 	}
 
 	return ac, nil
+}
+
+func (ac *AmaasClient) SetCacheDisable() {
+	ac.disableCache = true
+}
+
+func validateTags(tags []string) error {
+	if len(tags) == 0 {
+		return errors.New("tags cannot be empty")
+	}
+
+	if len(tags) > maxTagsListSize {
+		return fmt.Errorf("too many tags, maximum is %d", maxTagsListSize)
+	}
+
+	for _, tag := range tags {
+		if len(tag) > maxTagSize {
+			return fmt.Errorf("tag length cannot exceed %d", maxTagSize)
+		}
+		if tag == "" {
+			return errors.New("each tag cannot be empty")
+		}
+	}
+	return nil
 }

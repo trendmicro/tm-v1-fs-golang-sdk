@@ -1,17 +1,19 @@
 package client
 
 import (
+	"context"
 	"errors"
 	"math/rand"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	pb "github.com/trendmicro/cloudone-antimalware-golang-sdk/client/base"
+	pb "github.com/trendmicro/tm-v1-fs-golang-sdk/client/base"
 )
 
 /***************************************************************************
@@ -350,4 +352,46 @@ func TestRunUploadLoopBadS2CMsg(t *testing.T) {
 
 	_, err = stream.RecvToServer()
 	assert.NotNil(t, err)
+}
+
+func TestScanRunWithInvalidTags(t *testing.T) {
+	tests := []struct {
+		name        string
+		tags        []string
+		expectedErr string
+	}{
+		{
+			name:        "Empty tags",
+			tags:        []string{},
+			expectedErr: "tags cannot be empty",
+		},
+		{
+			name:        "Too many tags",
+			tags:        []string{"tag1", "tag2", "tag3", "tag4", "tag5", "tag6", "tag7", "tag8", "tag9"},
+			expectedErr: "too many tags, maximum is 8",
+		},
+		{
+			name:        "Empty tag",
+			tags:        []string{"", "tag1"},
+			expectedErr: "each tag cannot be empty",
+		},
+		{
+			name:        "Tag length exceeds 63",
+			tags:        []string{"1234567890123456789012345678901234567890123456789012345678901234"},
+			expectedErr: "tag length cannot exceed 63",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// arrange
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(180))
+
+			// act
+			_, err := scanRun(ctx, cancel, nil, nil, false, tt.tags)
+
+			// assert
+			assert.Equal(t, tt.expectedErr, err.Error())
+		})
+	}
 }

@@ -19,17 +19,19 @@ const (
 )
 
 const (
-	LogLevelOff     LogLevel = 0
-	LogLevelFatal            = 1
-	LogLevelError            = 2
-	LogLevelWarning          = 3
-	LogLevelInfo             = 4
-	LogLevelDebug            = 5
+	LogLevelOff     LogLevel = iota
+	LogLevelFatal   LogLevel = 1
+	LogLevelError   LogLevel = 2
+	LogLevelWarning LogLevel = 3
+	LogLevelInfo    LogLevel = 4
+	LogLevelDebug   LogLevel = 5
 )
 
 func NewClient(key string, region string) (c *AmaasClient, e error) {
 
 	ac := &AmaasClient{}
+
+	ac.appName = appNameV1FS
 
 	var err error
 
@@ -78,14 +80,14 @@ func (ac *AmaasClient) Destroy() {
 // but all file scans must complete before Destroy() can be invoked.
 //
 
-func (ac *AmaasClient) ScanFile(filePath string) (resp string, e error) {
+func (ac *AmaasClient) ScanFile(filePath string, tags []string) (resp string, e error) {
 	currentLogLevel = getLogLevel()
-	return ac.fileScanRun(filePath)
+	return ac.fileScanRun(filePath, tags)
 }
 
-func (ac *AmaasClient) ScanBuffer(buffer []byte, identifier string) (resp string, e error) {
+func (ac *AmaasClient) ScanBuffer(buffer []byte, identifier string, tags []string) (resp string, e error) {
 	currentLogLevel = getLogLevel()
-	return ac.bufferScanRun(buffer, identifier)
+	return ac.bufferScanRun(buffer, identifier, tags)
 }
 
 func (ac *AmaasClient) DumpConfig() (output string) {
@@ -110,4 +112,16 @@ func (ac *AmaasClient) GetConnection() *grpc.ClientConn {
 
 func (ac *AmaasClient) ConfigAuth(ctx context.Context) context.Context {
 	return ac.buildAuthContext(ctx)
+}
+
+func (ac *AmaasClient) SetAppName(appName string) {
+	ac.appName = appName
+}
+
+func (ac *AmaasClient) GetAppName() string {
+	return ac.appName
+}
+
+func (ac *AmaasClient) ConfigAppName(ctx context.Context) context.Context {
+	return ac.buildAppNameContext(ctx)
 }

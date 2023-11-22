@@ -114,6 +114,11 @@ func (reader *AmaasClientFileReader) Hash(algorithm string) (string, error) {
 		return "", err
 	}
 
+	_, err := reader.fd.Seek(0, 0)
+	if err != nil {
+		return "", err
+	}
+
 	hashValue := hex.EncodeToString(h.Sum(nil))
 
 	return fmt.Sprintf("%s:%s", algorithm, hashValue), nil

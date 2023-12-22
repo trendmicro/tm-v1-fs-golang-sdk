@@ -121,6 +121,7 @@ func TestGetServiceFQDNMapping(t *testing.T) {
 		"jp-1",
 		"gb-1",
 		"ca-1",
+		"trend-us-1",
 	}
 
 	for _, region := range inputs {

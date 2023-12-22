@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	pb "github.com/trendmicro/tm-v1-fs-golang-sdk/client/base"
+	pb "github.com/trendmicro/tm-v1-fs-golang-sdk/protos"
 )
 
 /***************************************************************************

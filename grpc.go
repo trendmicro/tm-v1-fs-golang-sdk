@@ -25,7 +25,7 @@ import (
 	gmd "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	pb "github.com/trendmicro/tm-v1-fs-golang-sdk/client/base"
+	pb "github.com/trendmicro/tm-v1-fs-golang-sdk/protos"
 )
 
 const (
@@ -587,14 +587,15 @@ func getServiceFQDN(targetRegion string) (string, error) {
 	}
 
 	mapping := map[string]string{
-		C1_US_REGION: "antimalware.us-1.cloudone.trendmicro.com",
-		C1_IN_REGION: "antimalware.in-1.cloudone.trendmicro.com",
-		C1_DE_REGION: "antimalware.de-1.cloudone.trendmicro.com",
-		C1_SG_REGION: "antimalware.sg-1.cloudone.trendmicro.com",
-		C1_AU_REGION: "antimalware.au-1.cloudone.trendmicro.com",
-		C1_JP_REGION: "antimalware.jp-1.cloudone.trendmicro.com",
-		C1_GB_REGION: "antimalware.gb-1.cloudone.trendmicro.com",
-		C1_CA_REGION: "antimalware.ca-1.cloudone.trendmicro.com",
+		C1_US_REGION:    "antimalware.us-1.cloudone.trendmicro.com",
+		C1_IN_REGION:    "antimalware.in-1.cloudone.trendmicro.com",
+		C1_DE_REGION:    "antimalware.de-1.cloudone.trendmicro.com",
+		C1_SG_REGION:    "antimalware.sg-1.cloudone.trendmicro.com",
+		C1_AU_REGION:    "antimalware.au-1.cloudone.trendmicro.com",
+		C1_JP_REGION:    "antimalware.jp-1.cloudone.trendmicro.com",
+		C1_GB_REGION:    "antimalware.gb-1.cloudone.trendmicro.com",
+		C1_CA_REGION:    "antimalware.ca-1.cloudone.trendmicro.com",
+		C1_TREND_REGION: "antimalware.trend-us-1.cloudone.trendmicro.com",
 	}
 
 	fqdn, exists := mapping[region]

@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	amaasclient "github.com/trendmicro/tm-v1-fs-golang-sdk/client"
+	amaasclient "github.com/trendmicro/tm-v1-fs-golang-sdk"
 )
 
 /*
@@ -51,6 +51,7 @@ func main() {
 	var enableTLS bool
 	var fileList []string
 	var region string
+	var pml bool
 
 	flag.StringVar(&path, "path", "", "Path of file or directory to scan.")
 	flag.BoolVar(&scanGoodFiles, "good", false, "Specify if scanning good/non-malicious files.")
@@ -61,6 +62,7 @@ func main() {
 	flag.StringVar(&apiKey, "apikey", "", "API key for service authentication")
 	flag.BoolVar(&enableTLS, "tls", false, "Specify to enable server authentication by client for GRPC")
 	flag.StringVar(&region, "region", "", "the region to connect to")
+	flag.BoolVar(&pml, "pml", false, "enable predictive machine learning detection")
 
 	flag.Parse()
 
@@ -90,6 +92,10 @@ func main() {
 	fileInfo, err := os.Stat(path)
 	if err != nil {
 		log.Fatalf("The path %s does not appear to be a valid one.", path)
+	}
+
+	if pml {
+		ac.SetPMLEnable()
 	}
 
 	if fileInfo.IsDir() {

@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	amaasclient "github.com/trendmicro/tm-v1-fs-golang-sdk/client"
+	amaasclient "github.com/trendmicro/tm-v1-fs-golang-sdk"
 )
 
 var (
@@ -14,6 +14,7 @@ var (
 	fileName  = flag.String("filename", os.Args[0], "file to scan")
 	enableTLS = flag.Bool("tls", false, "enable TLS")
 	region    = flag.String("region", "", "the region to connect to")
+	pml       = flag.Bool("pml", false, "enable predictive machine learning detection")
 )
 
 func main() {
@@ -36,6 +37,10 @@ func main() {
 		}
 	} else {
 		log.Fatal("Neither region nor addr is specified. Please specify one.")
+	}
+
+	if *pml {
+		client.SetPMLEnable()
 	}
 
 	result, err := client.ScanFile(*fileName, nil)

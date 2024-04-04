@@ -8,9 +8,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"golang.org/x/net/http/httpproxy"
+	"golang.org/x/net/proxy"
+	"google.golang.org/grpc/credentials/insecure"
 	"hash"
 	"io"
 	"log"
+	"net"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -21,11 +26,10 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
 	gmd "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	pb "github.com/trendmicro/tm-v1-fs-golang-sdk/client/base"
+	pb "github.com/trendmicro/tm-v1-fs-golang-sdk/protos"
 )
 
 const (
@@ -33,6 +37,7 @@ const (
 	_envvarServerAddr         = "TM_AM_SERVER_ADDR"           // <host FQDN>:<port no>
 	_envvarDisableTLS         = "TM_AM_DISABLE_TLS"           // Set to 1 to not use TLS for client-server communication; set to 0 or leave empty otherwise.
 	_envvarDisableCertVerify  = "TM_AM_DISABLE_CERT_VERIFY"   // Set to 1 to not disable server certificate check by client; set to 0 or leave empty otherwise.
+	_envInitWindowSize        = "TM_AM_WINDOW_SIZE"
 
 	appNameHTTPHeader = "tm-app-name"
 	appNameV1FS       = "V1FS"
@@ -228,9 +233,10 @@ type AmaasClient struct {
 	disableCache bool
 	appName      string
 	archHandler  AmaasClientArchiveHandler
+	pml          bool
 }
 
-func scanRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, dataReader AmaasClientReader, disableCache bool, tags []string) (string, error) {
+func scanRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, dataReader AmaasClientReader, disableCache bool, tags []string, pml bool, bulk bool) (string, error) {
 
 	defer cancel()
 
@@ -268,14 +274,14 @@ func scanRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, da
 
 	hashSha1, _ := dataReader.Hash("sha1")
 
-	if err = runInitRequest(stream, dataReader.Identifier(), int32(size), hashSha256, hashSha1, tags); err != nil {
+	if err = runInitRequest(stream, dataReader.Identifier(), uint64(size), hashSha256, hashSha1, tags, pml, bulk); err != nil {
 		return makeFailedScanJSONResp(), err
 	}
 
 	var result string
 	var totalUpload int32
 
-	if result, totalUpload, err = runUploadLoop(stream, dataReader); err != nil {
+	if result, totalUpload, err = runUploadLoop(stream, dataReader, bulk); err != nil {
 		return makeFailedScanJSONResp(), err
 	}
 
@@ -284,10 +290,9 @@ func scanRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, da
 	return result, nil
 }
 
-func runInitRequest(stream pb.Scan_RunClient, identifier string, dataSize int32, hashSha256 string, hashSha1 string, tags []string) error {
-
+func runInitRequest(stream pb.Scan_RunClient, identifier string, dataSize uint64, hashSha256 string, hashSha1 string, tags []string, pml bool, bulk bool) error {
 	if err := stream.Send(&pb.C2S{Stage: pb.Stage_STAGE_INIT,
-		FileName: identifier, RsSize: dataSize, FileSha256: hashSha256, FileSha1: hashSha1, Tags: tags}); err != nil {
+		FileName: identifier, RsSize: dataSize, FileSha256: hashSha256, FileSha1: hashSha1, Tags: tags, Trendx: pml, Bulk: bulk}); err != nil {
 		err = sanitizeGRPCError(err)
 		logMsg(LogLevelError, MSG("MSG_ID_ERR_INIT"), err)
 		return err
@@ -296,7 +301,7 @@ func runInitRequest(stream pb.Scan_RunClient, identifier string, dataSize int32,
 	return nil
 }
 
-func runUploadLoop(stream pb.Scan_RunClient, dataReader AmaasClientReader) (result string, totalUpload int32, overallErr error) {
+func runUploadLoop(stream pb.Scan_RunClient, dataReader AmaasClientReader, bulk bool) (result string, totalUpload int32, overallErr error) {
 
 	result = ""
 	totalUpload = 0
@@ -333,28 +338,44 @@ func runUploadLoop(stream pb.Scan_RunClient, dataReader AmaasClientReader) (resu
 
 		case pb.Command_CMD_RETR:
 
-			logMsg(LogLevelDebug, MSG("MSG_ID_DEBUG_RETR"), in.Offset, in.Length)
+			var length []int32
+			var offset []int32
 
-			totalUpload += in.Length
+			if bulk {
+				length = in.BulkLength
+				offset = in.BulkOffset
 
-			if buf, err := dataReader.ReadBytes(int64(in.Offset), in.Length); err != nil && err != io.EOF {
-
-				msg := fmt.Sprintf(MSG("MSG_ID_ERR_RETR_DATA"), err.Error())
-				logMsg(LogLevelError, msg)
-				overallErr = makeInternalError(msg)
-				return
+				if len(in.BulkOffset) > 1 {
+					logMsg(LogLevelDebug, MSG("MSG_ID_DEBUG_BULK_TRANSFER"))
+				}
 
 			} else {
+				length = append(length, in.Length)
+				offset = append(offset, in.Offset)
+			}
 
-				if err := stream.Send(&pb.C2S{
-					Stage:  pb.Stage_STAGE_RUN,
-					Offset: in.Offset,
-					Chunk:  buf}); err != nil {
+			for i := 0; i < len(length); i++ {
+				logMsg(LogLevelDebug, MSG("MSG_ID_DEBUG_RETR"), offset[i], length[i])
 
-					msg := fmt.Sprintf(MSG("MSG_ID_ERR_SEND_DATA"), err.Error())
+				if buf, err := dataReader.ReadBytes(int64(offset[i]), length[i]); err != nil && err != io.EOF {
+
+					msg := fmt.Sprintf(MSG("MSG_ID_ERR_RETR_DATA"), err.Error())
 					logMsg(LogLevelError, msg)
 					overallErr = makeInternalError(msg)
 					return
+
+				} else {
+					if err := stream.Send(&pb.C2S{
+						Stage:  pb.Stage_STAGE_RUN,
+						Offset: offset[i],
+						Chunk:  buf}); err != nil {
+
+						msg := fmt.Sprintf(MSG("MSG_ID_ERR_SEND_DATA"), err.Error())
+						logMsg(LogLevelError, msg)
+						overallErr = makeInternalError(msg)
+						return
+					}
+					totalUpload += length[i]
 				}
 			}
 
@@ -388,7 +409,7 @@ func (ac *AmaasClient) bufferScanRun(buffer []byte, identifier string, tags []st
 
 	ctx = ac.buildAppNameContext(ctx)
 
-	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), bufferReader, ac.disableCache, tags)
+	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), bufferReader, ac.disableCache, tags, ac.pml, true)
 }
 
 func (ac *AmaasClient) fileScanRun(fileName string, tags []string) (string, error) {
@@ -418,21 +439,59 @@ func (ac *AmaasClient) fileScanRunNormalFile(fileName string, tags []string) (st
 
 	ctx = ac.buildAppNameContext(ctx)
 
-	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), fileReader, ac.disableCache, tags)
+	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), fileReader, ac.disableCache, tags, ac.pml, true)
 }
 
 func (ac *AmaasClient) setupComm() error {
 	var err error
 
+	currentLogLevel = getLogLevel()
+
 	if ac.authKey != "" {
 		ac.isC1Token = isC1Token(ac.authKey)
 	}
 
+	var largerWindowSize int32 = 0
+	v, ok := os.LookupEnv(_envInitWindowSize)
+	if ok {
+		if val, err := strconv.ParseInt(v, 10, 32); err == nil {
+			largerWindowSize = int32(val)
+		}
+	}
+
+	logMsg(LogLevelDebug, "grpc init window size = %v", largerWindowSize)
+
+	enableProxy, d, err := ac.setupProxy()
+	if err != nil {
+		return err
+	}
+
 	if ac.conn == nil {
 		if ac.useTLS {
-			ac.conn, err = grpc.Dial(ac.addr, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{InsecureSkipVerify: !ac.verifyCert})))
+			if enableProxy {
+				ac.conn, err = grpc.Dial(ac.addr, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{InsecureSkipVerify: !ac.verifyCert})),
+					grpc.WithInitialWindowSize(largerWindowSize),
+					grpc.WithInitialConnWindowSize(largerWindowSize),
+					grpc.WithContextDialer(d),
+				)
+			} else {
+				ac.conn, err = grpc.Dial(ac.addr, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{InsecureSkipVerify: !ac.verifyCert})),
+					grpc.WithInitialWindowSize(largerWindowSize),
+					grpc.WithInitialConnWindowSize(largerWindowSize),
+				)
+			}
 		} else {
-			ac.conn, err = grpc.Dial(ac.addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if enableProxy {
+				ac.conn, err = grpc.Dial(ac.addr, grpc.WithTransportCredentials(insecure.NewCredentials()),
+					grpc.WithInitialWindowSize(largerWindowSize),
+					grpc.WithInitialConnWindowSize(largerWindowSize),
+					grpc.WithContextDialer(d),
+				)
+			} else {
+				ac.conn, err = grpc.Dial(ac.addr, grpc.WithTransportCredentials(insecure.NewCredentials()),
+					grpc.WithInitialWindowSize(largerWindowSize),
+					grpc.WithInitialConnWindowSize(largerWindowSize))
+			}
 		}
 
 		if err != nil {
@@ -441,6 +500,49 @@ func (ac *AmaasClient) setupComm() error {
 	}
 
 	return nil
+}
+
+func (ac *AmaasClient) setupProxy() (bool, func(ctx context.Context, addr string) (net.Conn, error), error) {
+	config := httpproxy.FromEnvironment()
+
+	addrUrl := &url.URL{
+		Scheme: "https",
+		Host:   ac.addr,
+	}
+
+	proxyUrl, err := config.ProxyFunc()(addrUrl)
+	if err != nil {
+		return false, nil, err
+	}
+
+	if proxyUrl == nil {
+		return false, nil, nil
+	}
+
+	if proxyUrl.Scheme == "socks5" {
+		var dc proxy.ContextDialer
+
+		proxyAuth := proxy.Auth{
+			User:     os.Getenv("PROXY_USER"),
+			Password: os.Getenv("PROXY_PASS"),
+		}
+
+		dialer, err := proxy.SOCKS5("tcp", proxyUrl.Host, &proxyAuth, proxy.Direct)
+		if err != nil {
+			return false, nil, err
+		}
+
+		dc = dialer.(interface {
+			DialContext(ctx context.Context, network, addr string) (net.Conn, error)
+		})
+
+		d := func(ctx context.Context, addr string) (net.Conn, error) {
+			return dc.DialContext(ctx, "tcp", addr)
+		}
+		return true, d, nil
+	} else {
+		return false, nil, nil
+	}
 }
 
 func (ac *AmaasClient) buildAuthContext(ctx context.Context) context.Context {
@@ -587,14 +689,15 @@ func getServiceFQDN(targetRegion string) (string, error) {
 	}
 
 	mapping := map[string]string{
-		C1_US_REGION: "antimalware.us-1.cloudone.trendmicro.com",
-		C1_IN_REGION: "antimalware.in-1.cloudone.trendmicro.com",
-		C1_DE_REGION: "antimalware.de-1.cloudone.trendmicro.com",
-		C1_SG_REGION: "antimalware.sg-1.cloudone.trendmicro.com",
-		C1_AU_REGION: "antimalware.au-1.cloudone.trendmicro.com",
-		C1_JP_REGION: "antimalware.jp-1.cloudone.trendmicro.com",
-		C1_GB_REGION: "antimalware.gb-1.cloudone.trendmicro.com",
-		C1_CA_REGION: "antimalware.ca-1.cloudone.trendmicro.com",
+		C1_US_REGION:    "antimalware.us-1.cloudone.trendmicro.com",
+		C1_IN_REGION:    "antimalware.in-1.cloudone.trendmicro.com",
+		C1_DE_REGION:    "antimalware.de-1.cloudone.trendmicro.com",
+		C1_SG_REGION:    "antimalware.sg-1.cloudone.trendmicro.com",
+		C1_AU_REGION:    "antimalware.au-1.cloudone.trendmicro.com",
+		C1_JP_REGION:    "antimalware.jp-1.cloudone.trendmicro.com",
+		C1_GB_REGION:    "antimalware.gb-1.cloudone.trendmicro.com",
+		C1_CA_REGION:    "antimalware.ca-1.cloudone.trendmicro.com",
+		C1_TREND_REGION: "antimalware.trend-us-1.cloudone.trendmicro.com",
 	}
 
 	fqdn, exists := mapping[region]
@@ -892,6 +995,10 @@ func NewClientInternal(key string, addr string, useTLS bool) (*AmaasClient, erro
 
 func (ac *AmaasClient) SetCacheDisable() {
 	ac.disableCache = true
+}
+
+func (ac *AmaasClient) SetPMLEnable() {
+	ac.pml = true
 }
 
 func validateTags(tags []string) error {

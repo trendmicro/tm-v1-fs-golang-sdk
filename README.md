@@ -6,7 +6,7 @@ This guide outlines the steps to establish your development environment and conf
 
 ## Environment
 
-- Golang 1.18 or newer
+- Golang 1.19 or newer
 - Trend Vision One account with a chosen region - for more information, see the [Trend Vision One documentation](https://docs.trendmicro.com/en-us/enterprise/trend-micro-xdr-help/Home).
 - A Trend Vision One API key with proper role - for more information, see the [Trend Vision One API key documentation](https://docs.trendmicro.com/en-us/enterprise/trend-vision-one/administrative-setti/accountspartfoundati/api-keys.aspx).
 
@@ -64,10 +64,10 @@ Replace "YOUR_API_KEY_OR_TOKEN" and "YOUR_REGION" with your actual API key or to
 
 **_Parameters_**
 
-| Parameter     | Description                                                                              |
-| ------------- | ---------------------------------------------------------------------------------------- |
-| region        | The region you obtained your api key.  Value provided must be one of the Vision One regions, e.g. `us-east-1`, `eu-central-1`, `ap-northeast-1`, `ap-southeast-2`, `ap-southeast-1`, etc. |
-| apikey        | Your own Vision One API Key.                                                              |
+| Parameter | Description                                                                                                                                                                                             |
+|-----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| region    | The region you obtained your api key.  Value provided must be one of the Vision One regions, e.g. `us-east-1`, `eu-central-1`, `ap-northeast-1`, `ap-southeast-2`, `ap-southeast-1`, `ap-south-1`, etc. |
+| apikey    | Your own Vision One API Key.                                                                                                                                                                            |
 
 ## Basic Usage
 
@@ -128,6 +128,14 @@ Remember to destroy the SDK client when you are done using it to release any all
 client.Destroy()
 ```
 
+### Enable PML (Predictive Machine Learning) Detection
+
+You can enable PML detection by calling the `SetPMLEnable` function:
+
+```go
+client.SetPMLEnable()
+```
+
 ## Usage Examples
 As examples, you can find two important files in the `tools/` directory of the SDK package:
 
@@ -171,6 +179,9 @@ Path of file to scan
 `-apikey <string>`
 API key for service authentication if authentication is enabled
 
+`-pml`
+Specify to enable PML (Predictive Machine Learning) detection
+
 ### scanfiles
 
 This is another program that uses the gRPC client library to communicate with our server. Depending on whether or not the `-good` flag is specified, and the scan result returned from the scan, the program will output result that shows the testing was successful or not.
@@ -199,3 +210,18 @@ The address to connect to for gRPC (default "localhost:50051")
 
 `-apikey <string>`
 API key for service authentication if authentication is enabled
+
+`-pml`
+Specify to enable PML (Predictive Machine Learning) detection
+
+## Proxy Configuration
+
+The cli tool loads the proxy configuration from the following set of optional environment variables
+
+| Environment Variable | Required/Optional | Description                                                                                                                                                     |
+|----------------------|-------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `NO_PROXY`           | Optional          | Add the endpoints to the comma-separated list of host names if you want to skip proxy settings. Note: only an asterisk, '\*' matches all hosts                  |
+| `HTTP_PROXY `        | Optional          | `http://proxy.example.com`                                                                                                                                      |
+| `HTTPS_PROXY`        | Optional          | `https://proxy.example.com`<br><br>If the proxy server is a SOCKS5 proxy, you must specify the SOCKS5 protocol in the URL as `socks5://socks_proxy.example.com` |
+| `PROXY_USER`         | Optional          | Optional username for authentication header used in `Proxy-Authorization`                                                                                       |
+| `PROXY_PASS`         | Optional          | Optional password for authentication header used in `Proxy-Authorization`, used only when `PROXY_USER` is configured                                            |

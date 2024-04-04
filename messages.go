@@ -36,6 +36,9 @@ var messageMap = map[string]string{
 	"MSG_ID_ERR_AH_GOROUTINE_ERR":      "File scanning inside goroutine encountered error",
 	"MSG_ID_DEBUG_QUEUE_STATUS":        "A job removed from work queue, queue status len %d / cap %d",
 	"MSG_ID_DEBUG_QUEUE_ERR":           "Unexpected value read from queue: %d",
+	"MSG_ID_DEBUG_ENTER_BULK_MODE":     "Enter bulk mode",
+	"MSG_ID_DEBUG_ENTER_NON_BULK_MODE": "Enter non-bulk mode",
+	"MSG_ID_DEBUG_BULK_TRANSFER":       "Bulk transfer triggered",
 	"MSG_ID_ERR_UNSUPPORTED_ALGORITHM": "Unsupported algorithm for calculating the hash: %s",
 	"MSG_ID_ERR_TIMEOUT":               "Context deadline exceeded",
 }

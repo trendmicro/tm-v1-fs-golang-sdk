@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+// https://cloud.google.com/apis/design/versioning
+package amaas.scan.v1;
+
+option go_package = "amaas/scanner/base";
+option java_package = "com.trend.cloudone.amaas.scan";
+
+// Interface exported by the server.
+service Scan {
+  rpc Run(stream C2S) returns (stream S2C) {}
+}
+
+enum Stage {
+  STAGE_INIT = 0;
+  STAGE_RUN = 1;
+  STAGE_FINI = 2;
+}
+
+message C2S {
+  Stage stage = 1;
+  string file_name = 2;
+  uint64 rs_size = 3;
+  int32 offset = 4;
+  bytes chunk = 5;
+  bool trendx = 6;
+  string file_sha1 = 7;
+  string file_sha256 = 8;
+  repeated string tags = 9;
+  bool bulk = 10;
+  bool spn_feedback = 11;
+}
+
+enum Command {
+  CMD_RETR = 0;
+  CMD_QUIT = 1;
+}
+
+message S2C {
+  Stage stage = 1;
+  Command cmd = 2;
+  int32 offset = 3;
+  int32 length = 4;
+  string result = 5;
+  repeated int32 bulk_offset = 6;
+  repeated int32 bulk_length = 7;
+  string session_id = 8;
+}

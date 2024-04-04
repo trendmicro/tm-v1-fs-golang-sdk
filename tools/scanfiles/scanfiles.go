@@ -52,6 +52,8 @@ func main() {
 	var fileList []string
 	var region string
 	var pml bool
+	var feedback bool
+	var tag string
 
 	flag.StringVar(&path, "path", "", "Path of file or directory to scan.")
 	flag.BoolVar(&scanGoodFiles, "good", false, "Specify if scanning good/non-malicious files.")
@@ -63,6 +65,8 @@ func main() {
 	flag.BoolVar(&enableTLS, "tls", false, "Specify to enable server authentication by client for GRPC")
 	flag.StringVar(&region, "region", "", "the region to connect to")
 	flag.BoolVar(&pml, "pml", false, "enable predictive machine learning detection")
+	flag.BoolVar(&feedback, "feedback", false, "enable SPN feedback")
+	flag.StringVar(&tag, "tag", "", "tags to be used for scanning")
 
 	flag.Parse()
 
@@ -98,6 +102,15 @@ func main() {
 		ac.SetPMLEnable()
 	}
 
+	if feedback {
+		ac.SetFeedbackEnable()
+	}
+
+	var tagsArray []string
+	if tag != "" {
+		tagsArray = strings.Split(tag, ",")
+	}
+
 	if fileInfo.IsDir() {
 
 		files, err := ioutil.ReadDir(path)
@@ -125,9 +138,9 @@ func main() {
 
 	var tr OverallTestResult
 	if scanInParallel {
-		tr = scanFileListInParallel(fileList, scanGoodFiles, ac)
+		tr = scanFileListInParallel(fileList, scanGoodFiles, ac, tagsArray)
 	} else {
-		tr = scanFileListInSequence(fileList, scanGoodFiles, ac)
+		tr = scanFileListInSequence(fileList, scanGoodFiles, ac, tagsArray)
 	}
 
 	jsonData, _ := json.Marshal(tr)
@@ -138,7 +151,7 @@ func main() {
 	os.Exit(0)
 }
 
-func scanFileListInSequence(fileList []string, scanGoodFiles bool, scanner *amaasclient.AmaasClient) OverallTestResult {
+func scanFileListInSequence(fileList []string, scanGoodFiles bool, scanner *amaasclient.AmaasClient, tags []string) OverallTestResult {
 
 	var tr OverallTestResult
 	tr.Passed = true
@@ -153,7 +166,7 @@ func scanFileListInSequence(fileList []string, scanGoodFiles bool, scanner *amaa
 
 		sr.StartTime = time.Now()
 
-		jsonResult, err := scanner.ScanFile(fileList[i], nil)
+		jsonResult, err := scanner.ScanFile(fileList[i], tags)
 		if err != nil {
 			log.Print(err.Error())
 		}
@@ -173,7 +186,7 @@ func scanFileListInSequence(fileList []string, scanGoodFiles bool, scanner *amaa
 	return tr
 }
 
-func scanFileListInParallel(fileList []string, scanGoodFiles bool, scanner *amaasclient.AmaasClient) OverallTestResult {
+func scanFileListInParallel(fileList []string, scanGoodFiles bool, scanner *amaasclient.AmaasClient, tags []string) OverallTestResult {
 
 	var tr OverallTestResult
 	tr.Passed = true
@@ -192,7 +205,7 @@ func scanFileListInParallel(fileList []string, scanGoodFiles bool, scanner *amaa
 
 			sr.StartTime = time.Now()
 
-			jsonResult, err := scanner.ScanFile(f, nil)
+			jsonResult, err := scanner.ScanFile(f, tags)
 			if err != nil {
 				log.Print(err.Error())
 			}

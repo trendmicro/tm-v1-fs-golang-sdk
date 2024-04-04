@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 1.1.1 - 2024-04-04
+
+* Fix bug in SPN smart feedback
+* Add tag flag to example tools
+
 ## 1.1.0 - 2024-04-03
 
 * Update protos

@@ -136,6 +136,14 @@ You can enable PML detection by calling the `SetPMLEnable` function:
 client.SetPMLEnable()
 ```
 
+### Enable SPN feedback
+
+You can enable SPN feedback by calling the `SetFeedbackEnable` function:
+
+```go
+client.SetFeedbackEnable()
+```
+
 ## Usage Examples
 As examples, you can find two important files in the `tools/` directory of the SDK package:
 
@@ -182,6 +190,12 @@ API key for service authentication if authentication is enabled
 `-pml`
 Specify to enable PML (Predictive Machine Learning) detection
 
+`-feedback`
+Specify to enable SPN feedback
+
+`-tag <string>`
+Specify the tags to be used for scanning, separated by commas
+
 ### scanfiles
 
 This is another program that uses the gRPC client library to communicate with our server. Depending on whether or not the `-good` flag is specified, and the scan result returned from the scan, the program will output result that shows the testing was successful or not.
@@ -213,6 +227,13 @@ API key for service authentication if authentication is enabled
 
 `-pml`
 Specify to enable PML (Predictive Machine Learning) detection
+
+`-feedback`
+Specify to enable SPN feedback
+
+`-tag <string>`
+Specify the tags to be used for scanning, separated by commas
+
 
 ## Proxy Configuration
 

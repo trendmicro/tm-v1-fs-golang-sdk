@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"os"
+	"strings"
 
 	amaasclient "github.com/trendmicro/tm-v1-fs-golang-sdk"
 )
@@ -15,6 +16,8 @@ var (
 	enableTLS = flag.Bool("tls", false, "enable TLS")
 	region    = flag.String("region", "", "the region to connect to")
 	pml       = flag.Bool("pml", false, "enable predictive machine learning detection")
+	feedback  = flag.Bool("feedback", false, "enable SPN feedback")
+	tag       = flag.String("tag", "", "tags to be used for scanning")
 )
 
 func main() {
@@ -43,7 +46,16 @@ func main() {
 		client.SetPMLEnable()
 	}
 
-	result, err := client.ScanFile(*fileName, nil)
+	if *feedback {
+		client.SetFeedbackEnable()
+	}
+
+	var tagsArray []string
+	if *tag != "" {
+		tagsArray = strings.Split(*tag, ",")
+	}
+
+	result, err := client.ScanFile(*fileName, tagsArray)
 	if err != nil {
 		log.Fatalf(err.Error())
 	}

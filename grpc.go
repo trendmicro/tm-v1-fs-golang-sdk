@@ -234,9 +234,10 @@ type AmaasClient struct {
 	appName      string
 	archHandler  AmaasClientArchiveHandler
 	pml          bool
+	feedback     bool
 }
 
-func scanRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, dataReader AmaasClientReader, disableCache bool, tags []string, pml bool, bulk bool) (string, error) {
+func scanRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, dataReader AmaasClientReader, disableCache bool, tags []string, pml bool, bulk bool, feedback bool) (string, error) {
 
 	defer cancel()
 
@@ -274,7 +275,7 @@ func scanRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, da
 
 	hashSha1, _ := dataReader.Hash("sha1")
 
-	if err = runInitRequest(stream, dataReader.Identifier(), uint64(size), hashSha256, hashSha1, tags, pml, bulk); err != nil {
+	if err = runInitRequest(stream, dataReader.Identifier(), uint64(size), hashSha256, hashSha1, tags, pml, bulk, feedback); err != nil {
 		return makeFailedScanJSONResp(), err
 	}
 
@@ -290,9 +291,9 @@ func scanRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, da
 	return result, nil
 }
 
-func runInitRequest(stream pb.Scan_RunClient, identifier string, dataSize uint64, hashSha256 string, hashSha1 string, tags []string, pml bool, bulk bool) error {
+func runInitRequest(stream pb.Scan_RunClient, identifier string, dataSize uint64, hashSha256 string, hashSha1 string, tags []string, pml bool, bulk bool, feedback bool) error {
 	if err := stream.Send(&pb.C2S{Stage: pb.Stage_STAGE_INIT,
-		FileName: identifier, RsSize: dataSize, FileSha256: hashSha256, FileSha1: hashSha1, Tags: tags, Trendx: pml, Bulk: bulk}); err != nil {
+		FileName: identifier, RsSize: dataSize, FileSha256: hashSha256, FileSha1: hashSha1, Tags: tags, Trendx: pml, Bulk: bulk, SpnFeedback: feedback}); err != nil {
 		err = sanitizeGRPCError(err)
 		logMsg(LogLevelError, MSG("MSG_ID_ERR_INIT"), err)
 		return err
@@ -409,7 +410,7 @@ func (ac *AmaasClient) bufferScanRun(buffer []byte, identifier string, tags []st
 
 	ctx = ac.buildAppNameContext(ctx)
 
-	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), bufferReader, ac.disableCache, tags, ac.pml, true)
+	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), bufferReader, ac.disableCache, tags, ac.pml, true, ac.feedback)
 }
 
 func (ac *AmaasClient) fileScanRun(fileName string, tags []string) (string, error) {
@@ -439,7 +440,7 @@ func (ac *AmaasClient) fileScanRunNormalFile(fileName string, tags []string) (st
 
 	ctx = ac.buildAppNameContext(ctx)
 
-	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), fileReader, ac.disableCache, tags, ac.pml, true)
+	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), fileReader, ac.disableCache, tags, ac.pml, true, ac.feedback)
 }
 
 func (ac *AmaasClient) setupComm() error {
@@ -999,6 +1000,10 @@ func (ac *AmaasClient) SetCacheDisable() {
 
 func (ac *AmaasClient) SetPMLEnable() {
 	ac.pml = true
+}
+
+func (ac *AmaasClient) SetFeedbackEnable() {
+	ac.feedback = true
 }
 
 func validateTags(tags []string) error {

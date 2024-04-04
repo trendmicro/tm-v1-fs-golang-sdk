@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	pb "github.com/trendmicro/tm-v1-fs-golang-sdk/client/base"
+	pb "github.com/trendmicro/tm-v1-fs-golang-sdk/protos"
 )
 
 /***************************************************************************
@@ -195,12 +195,12 @@ func (mock *ClientStreamMock) RecvToServer() (*pb.C2S, error) {
 
 var errChan chan error = make(chan error, NumReadIterations)
 
-func createMockClientRun(t *testing.T, reader AmaasClientReader) *ClientStreamMock {
+func createMockClientRun(t *testing.T, reader AmaasClientReader, bulk bool) *ClientStreamMock {
 
 	stream := createClientStreamMock()
 
 	go func() {
-		_, _, err := runUploadLoop(stream, reader)
+		_, _, err := runUploadLoop(stream, reader, bulk)
 		if err != nil {
 			errChan <- err
 		}
@@ -235,7 +235,25 @@ func TestRunUploadLoopNormalForBufferReader(t *testing.T) {
 	assert.Nil(t, err)
 	defer reader.Close()
 
-	checkRunUploadLoop(t, dat, reader)
+	checkRunUploadLoop(t, dat, reader, false)
+}
+
+func TestRunUploadLoopNormalForBufferReaderBulk(t *testing.T) {
+
+	dat := createTestDat("test.*.dat")
+	assert.NotNil(t, dat)
+	defer os.Remove(dat.Filename())
+
+	// Read the content of the whole file into a byte slice.
+	buffer, err := os.ReadFile(dat.Filename())
+	assert.Nil(t, err)
+
+	// Pass the buffer to a buffer reader.
+	reader, err := InitBufferReader(buffer, dat.Filename())
+	assert.Nil(t, err)
+	defer reader.Close()
+
+	checkRunUploadLoop(t, dat, reader, true)
 }
 
 // Test normal read conditions where client receives all valid
@@ -256,19 +274,37 @@ func TestRunUploadLoopNormalForFileReader(t *testing.T) {
 	assert.Nil(t, err)
 	defer reader.Close()
 
-	checkRunUploadLoop(t, dat, reader)
+	checkRunUploadLoop(t, dat, reader, false)
 }
 
-func checkRunUploadLoop(t *testing.T, dat *TestDat, reader AmaasClientReader) {
+func TestRunUploadLoopNormalForFileReaderBulk(t *testing.T) {
 
-	stream := createMockClientRun(t, reader)
+	dat := createTestDat("test.*.dat")
+	assert.NotNil(t, dat)
+	defer os.Remove(dat.Filename())
+
+	reader, err := InitFileReader(dat.Filename())
+	assert.Nil(t, err)
+	defer reader.Close()
+
+	checkRunUploadLoop(t, dat, reader, true)
+}
+
+func checkRunUploadLoop(t *testing.T, dat *TestDat, reader AmaasClientReader, bulk bool) {
+	stream := createMockClientRun(t, reader, bulk)
 	assert.NotNil(t, stream)
 
 	reads := make([](*pb.S2C), NumReadIterations)
 
 	for i := 0; i < NumReadIterations; i++ {
-		s2c := generateRetrS2C(dat.Filesize())
-		assert.NotNil(t, s2c)
+		var s2c *pb.S2C
+		if bulk {
+			s2c = generateRetrS2CBulk(dat.Filesize())
+			assert.NotNil(t, s2c)
+		} else {
+			s2c = generateRetrS2C(dat.Filesize())
+			assert.NotNil(t, s2c)
+		}
 
 		err := stream.SendFromServer(s2c)
 		assert.Nil(t, err)
@@ -285,7 +321,11 @@ func checkRunUploadLoop(t *testing.T, dat *TestDat, reader AmaasClientReader) {
 		assert.Nil(t, err)
 		assert.NotNil(t, resp)
 
-		verifyC2SResp(t, dat, reads[i], resp)
+		if bulk {
+			verifyC2SRespBulk(t, dat, reads[i], resp)
+		} else {
+			verifyC2SResp(t, dat, reads[i], resp)
+		}
 	}
 }
 
@@ -305,6 +345,25 @@ func generateRetrS2C(fileSize int) *pb.S2C {
 	}
 }
 
+func generateRetrS2CBulk(fileSize int) *pb.S2C {
+	offset := rand.Intn(fileSize)
+	length := rand.Intn(MaxChunkReadSize) + 1
+	end := offset + length
+	if end > fileSize {
+		length -= (end - fileSize)
+	}
+
+	bulkLength := []int32{int32(length)}
+	bulkOffset := []int32{int32(offset)}
+
+	return &pb.S2C{
+		Stage:      pb.Stage_STAGE_RUN,
+		Cmd:        pb.Command_CMD_RETR,
+		BulkLength: bulkLength,
+		BulkOffset: bulkOffset,
+	}
+}
+
 func verifyC2SResp(t *testing.T, dat *TestDat, req *pb.S2C, resp *pb.C2S) {
 	assert.Equal(t, pb.Stage_STAGE_RUN, resp.Stage)
 	assert.Equal(t, req.Offset, resp.Offset)
@@ -317,6 +376,18 @@ func verifyC2SResp(t *testing.T, dat *TestDat, req *pb.S2C, resp *pb.C2S) {
 	}
 }
 
+func verifyC2SRespBulk(t *testing.T, dat *TestDat, req *pb.S2C, resp *pb.C2S) {
+	assert.Equal(t, pb.Stage_STAGE_RUN, resp.Stage)
+	assert.Equal(t, req.BulkOffset[0], resp.Offset)
+
+	origLen := int(req.BulkLength[0])
+	assert.Equal(t, origLen, len(resp.Chunk))
+
+	for i := 0; i < origLen; i++ {
+		assert.Equal(t, dat.ExpectedValueAt(int(req.BulkOffset[0])+i), resp.Chunk[i])
+	}
+}
+
 // Test condition where the S2C command to the client is simply
 // some invalid garbage.
 
@@ -325,7 +396,7 @@ func TestRunUploadLoopBadS2CMsg(t *testing.T) {
 	reader, err := InitBufferReader(make([]byte, 10), "whatever")
 	assert.Nil(t, err)
 
-	stream := createMockClientRun(t, reader)
+	stream := createMockClientRun(t, reader, false)
 	assert.NotNil(t, stream)
 
 	s2c := &pb.S2C{
@@ -388,7 +459,7 @@ func TestScanRunWithInvalidTags(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(180))
 
 			// act
-			_, err := scanRun(ctx, cancel, nil, nil, false, tt.tags)
+			_, err := scanRun(ctx, cancel, nil, nil, false, tt.tags, false, true)
 
 			// assert
 			assert.Equal(t, tt.expectedErr, err.Error())

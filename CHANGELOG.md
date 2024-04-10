@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 1.1.2 - 2024-04-10
+
+* Update README.md
+* Extend default timeout to 300s
+ 
 ## 1.1.1 - 2024-04-04
 
 * Fix bug in SPN smart feedback

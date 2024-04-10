@@ -9,7 +9,7 @@ import (
 
 const (
 	_defaultCommPort    = 443 // Port used by AMaaS Client to communicate with server.
-	_defaultTimeoutSecs = 180 // 3 minutes
+	_defaultTimeoutSecs = 300 // 5 minutes
 )
 
 const (

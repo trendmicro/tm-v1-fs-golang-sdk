@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 1.2.0 - 2024-07-05
+
+* Support verbose scan result
+
 ## 1.1.2 - 2024-04-10
 
 * Update README.md

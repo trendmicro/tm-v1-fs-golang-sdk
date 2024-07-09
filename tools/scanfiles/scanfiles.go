@@ -53,6 +53,7 @@ func main() {
 	var region string
 	var pml bool
 	var feedback bool
+	var verbose bool
 	var tag string
 
 	flag.StringVar(&path, "path", "", "Path of file or directory to scan.")
@@ -66,6 +67,7 @@ func main() {
 	flag.StringVar(&region, "region", "", "the region to connect to")
 	flag.BoolVar(&pml, "pml", false, "enable predictive machine learning detection")
 	flag.BoolVar(&feedback, "feedback", false, "enable SPN feedback")
+	flag.BoolVar(&verbose, "verbose", false, "enable verbose scan result")
 	flag.StringVar(&tag, "tag", "", "tags to be used for scanning")
 
 	flag.Parse()
@@ -104,6 +106,10 @@ func main() {
 
 	if feedback {
 		ac.SetFeedbackEnable()
+	}
+
+	if verbose {
+		ac.SetVerboseEnable()
 	}
 
 	var tagsArray []string
@@ -237,18 +243,8 @@ over time. At some point, this should probably be moved into the AMaaS test suit
 */
 
 func checkResult(filename string, input string, isGoodFile bool) bool {
-
-	type RawScanResult struct {
-		Version       string    `json:"version"`
-		ScanResult    int       `json:"scanResult"`
-		ScanId        string    `json:"scanId"`
-		ScanTimestamp time.Time `json:"scanTimestamp"`
-		FileName      string    `json:"fileName"`
-		FoundMalwares []string  `json:"foundMalwares"`
-	}
-
 	detectedVirus := false
-	var rawResult RawScanResult
+	var rawResult amaasclient.ScanResult2Client
 
 	err := json.Unmarshal([]byte(input), &rawResult)
 	if err != nil {

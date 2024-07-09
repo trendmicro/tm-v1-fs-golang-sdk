@@ -29,6 +29,7 @@ message C2S {
   repeated string tags = 9;
   bool bulk = 10;
   bool spn_feedback = 11;
+  bool verbose = 12;
 }
 
 enum Command {

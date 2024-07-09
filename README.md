@@ -143,6 +143,14 @@ You can enable SPN feedback by calling the `SetFeedbackEnable` function:
 client.SetFeedbackEnable()
 ```
 
+### Enable Verbose Scan Result
+
+You can enable verbose scan result by calling the `SetVerboseEnable` function:
+
+```go
+client.SetVerboseEnable()
+```
+
 ## Golang Client SDK API Reference
 
 ### ```func NewClient(key string, region string) (c *AmaasClient, e error)```
@@ -152,14 +160,14 @@ Creates a new instance of the client object, and provisions essential settings, 
 **_Parameters_**
 
 | Parameter       | Description                                                                                                                                                                                  |
-|-----------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | key (string)    | A valid API key must be provided if the environment variable `TM_AM_AUTH_KEY` is not set.                                                                                                    |
 | region (string) | The region you obtained your api key.  Value provided must be one of the Vision One regions: `us-east-1`, `eu-central-1`, `ap-southeast-1`, `ap-southeast-2`, `ap-northeast-1`, `ap-south-1` |
 
 **_Return values_**
 
 | Parameter        | Description                                           |
-|------------------|-------------------------------------------------------|
+| ---------------- | ----------------------------------------------------- |
 | c (*AmaasClient) | Pointer to an client object. Nil if error encountered |
 | e (error)        | Nil if no error encountered; non-nil otherwise.       |
 
@@ -179,7 +187,7 @@ Submit content of a file or buffer to be scanned.
 **_Parameters_**
 
 | Parameter           | Description                                                                                                                             |
-|---------------------|-----------------------------------------------------------------------------------------------------------------------------------------|
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | filePath (string)   | Path of the file to scan                                                                                                                |
 | buffer ([]byte)     | Buffer containing the data to scan                                                                                                      |
 | identifier (string) | A caller-chosen string to associate with the scan that will be returned in JSON response as part of `fileName` name/value; can be empty |
@@ -188,11 +196,13 @@ Submit content of a file or buffer to be scanned.
 **_Return values_**
 
 | Parameter     | Description                                        |
-|---------------|----------------------------------------------------|
+| ------------- | -------------------------------------------------- |
 | resp (string) | JSON-formatted response describing the scan result |
 | e (error)     | Nil if no error encountered; non-nil otherwise.    |
 
 **_Sample JSON response_**
+
+***_Concise Format_***
 
 ```json
 {
@@ -211,6 +221,58 @@ Submit content of a file or buffer to be scanned.
   ],
   "fileSHA1":"fc7042d1d8bbe655ab950355f86a81ded9ee4903",
   "fileSHA256":"1b9f8773919a1770fec35e2988650fde3adaae81a3ac2ad77b67cafd013afcdc"
+}
+```
+
+***_Verbose Format_***
+
+```json
+{
+  "scanType": "sdk",
+  "objectType": "file",
+  "timestamp": {
+    "start": "2024-07-05T20:01:21.064Z",
+    "end": "2024-07-05T20:01:21.069Z"
+  },
+  "schemaVersion": "1.0.0",
+  "scannerVersion": "1.0.0-59",
+  "fileName": "eicar.com",
+  "rsSize": 68,
+  "scanId": "40d7a38e-a1d3-400b-a09c-7aa9cd62658f",
+  "accountId": "",
+  "result": {
+    "atse": {
+      "elapsedTime": 4693,
+      "fileType": 5,
+      "fileSubType": 0,
+      "version": {
+        "engine": "23.57.0-1002",
+        "lptvpn": 385,
+        "ssaptn": 731,
+        "tmblack": 253,
+        "tmwhite": 239,
+        "macvpn": 914
+      },
+      "malwareCount": 1,
+      "malware": [
+        {
+          "name": "Eicar_test_file",
+          "fileName": "eicar.com",
+          "type": "",
+          "fileType": 5,
+          "fileSubType": 0,
+          "fileTypeName": "COM",
+          "fileSubTypeName": "VSDT_COM_DOS"
+        }
+      ],
+      "error": null,
+      "fileTypeName": "COM",
+      "fileSubTypeName": "VSDT_COM_DOS"
+    }
+  },
+  "fileSHA1": "3395856ce81f2b7382dee72602f798b642f14140",
+  "fileSHA256": "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f",
+  "appName": "V1FS"
 }
 ```
 
@@ -240,7 +302,7 @@ For configuring the SDK's active logging level. The change is applied globally t
 **_Parameters_**
 
 | Parameter        | Description                                                                                                                                |
-|------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | level (LogLevel) | Valid values are LogLevelOff, LogLevelFatal, LogLevelError, LogLevelWarning, LogLevelInfo, and LogLevelDebug; default level is LogLevelOff |
 
 ---
@@ -252,7 +314,7 @@ For setting up custom logging by provisioning the SDK with a custom callback fun
 **_Parameters_**
 
 | Parameter    | Description                                                                                            |
-|--------------|--------------------------------------------------------------------------------------------------------|
+| ------------ | ------------------------------------------------------------------------------------------------------ |
 | f (function) | A function with the prototype `func(level LogLevel, levelStr string, format string, a ...interface{})` |
 
 ## Usage Examples
@@ -306,6 +368,9 @@ Specify to enable PML (Predictive Machine Learning) detection
 `-feedback`
 Specify to enable SPN feedback
 
+`-verbose`
+Specify to enable verbose scan result
+
 `-tag <string>`
 Specify the tags to be used for scanning, separated by commas
 
@@ -344,6 +409,9 @@ Specify to enable PML (Predictive Machine Learning) detection
 `-feedback`
 Specify to enable SPN feedback
 
+`-verbose`
+Specify to enable verbose scan result
+
 `-tag <string>`
 Specify the tags to be used for scanning, separated by commas
 
@@ -352,9 +420,9 @@ Specify the tags to be used for scanning, separated by commas
 The cli tool loads the proxy configuration from the following set of optional environment variables
 
 | Environment Variable | Required/Optional | Description                                                                                                                                                     |
-|----------------------|-------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| -------------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `NO_PROXY`           | Optional          | Add the endpoints to the comma-separated list of host names if you want to skip proxy settings. Note: only an asterisk, '\*' matches all hosts                  |
-| `HTTP_PROXY`        | Optional          | `http://proxy.example.com`                                                                                                                                      |
+| `HTTP_PROXY`         | Optional          | `http://proxy.example.com`                                                                                                                                      |
 | `HTTPS_PROXY`        | Optional          | `https://proxy.example.com`<br><br>If the proxy server is a SOCKS5 proxy, you must specify the SOCKS5 protocol in the URL as `socks5://socks_proxy.example.com` |
 | `PROXY_USER`         | Optional          | Optional username for authentication header used in `Proxy-Authorization`                                                                                       |
 | `PROXY_PASS`         | Optional          | Optional password for authentication header used in `Proxy-Authorization`, used only when `PROXY_USER` is configured                                            |
@@ -366,7 +434,7 @@ The following environment variables are supported by Golang Client SDK and can b
 For example, the API key can be specified using the `TM_AM_AUTH_KEY` environment variable instead of hardcoded into the application.
 
 | Variable Name             | Description & Purpose                                                       | Valid Values               |
-|---------------------------|-----------------------------------------------------------------------------|----------------------------|
+| ------------------------- | --------------------------------------------------------------------------- | -------------------------- |
 | `TM_AM_SCAN_TIMEOUT_SECS` | Specify, in number of seconds, to override the default scan timeout period  | 0, 1, 2, ... ; default=300 |
 | `TM_AM_AUTH_KEY`          | Can be used to specify the authorization key; overrides function call value | empty or string            |
 

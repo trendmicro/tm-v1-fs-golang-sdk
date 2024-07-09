@@ -17,6 +17,7 @@ var (
 	region    = flag.String("region", "", "the region to connect to")
 	pml       = flag.Bool("pml", false, "enable predictive machine learning detection")
 	feedback  = flag.Bool("feedback", false, "enable SPN feedback")
+	verbose   = flag.Bool("verbose", false, "enable verbose scan result")
 	tag       = flag.String("tag", "", "tags to be used for scanning")
 )
 
@@ -48,6 +49,10 @@ func main() {
 
 	if *feedback {
 		client.SetFeedbackEnable()
+	}
+
+	if *verbose {
+		client.SetVerboseEnable()
 	}
 
 	var tagsArray []string

@@ -151,6 +151,14 @@ You can enable verbose scan result by calling the `SetVerboseEnable` function:
 client.SetVerboseEnable()
 ```
 
+### Disable Digest Calculation
+
+You can disable digest calculation by calling the `SetDigestDisable` function:
+
+```go
+client.SetDigestDisable()
+```
+
 ## Golang Client SDK API Reference
 
 ### ```func NewClient(key string, region string) (c *AmaasClient, e error)```
@@ -319,7 +327,7 @@ For setting up custom logging by provisioning the SDK with a custom callback fun
 
 ## Usage Examples
 
-As examples, you can find two important files in the `tools/` directory of the SDK package:
+As examples, you can find two important files in the `examples/` directory of the SDK package:
 
 `client.go`: This file contains the main client initialization logic and functions for scanning a single file.
 
@@ -334,14 +342,14 @@ You can refer to these files for a deeper understanding of how to integrate and 
 Build the client tools requires the following:
 Execute `make build` in the root directory to build the client tools.
 
-The build process will produce the following inside the `tools/` directory:
+The build process will produce the following inside the `examples/` directory:
 
 - client
 - scanfiles
 
 ### client
 
-This program is located in the `tools/` folder. It supports the gRPC-based server.
+This program is located in the `examples/` folder. It supports the gRPC-based server.
 
 `client [command-line flags]`
 
@@ -373,6 +381,9 @@ Specify to enable verbose scan result
 
 `-tag <string>`
 Specify the tags to be used for scanning, separated by commas
+
+`-digest=false`
+Specify to disable digest calculation
 
 ### scanfiles
 
@@ -414,6 +425,9 @@ Specify to enable verbose scan result
 
 `-tag <string>`
 Specify the tags to be used for scanning, separated by commas
+
+`-digest=false`
+Specify to disable digest calculation
 
 ## Proxy Configuration
 

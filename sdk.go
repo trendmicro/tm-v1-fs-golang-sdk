@@ -29,7 +29,7 @@ const (
 
 func NewClient(key string, region string) (c *AmaasClient, e error) {
 
-	ac := &AmaasClient{}
+	ac := &AmaasClient{digest: true}
 
 	ac.appName = appNameV1FS
 
@@ -43,7 +43,7 @@ func NewClient(key string, region string) (c *AmaasClient, e error) {
 		return nil, err
 	}
 
-	ac.useTLS, ac.verifyCert = retrieveTLSSettings()
+	ac.useTLS = retrieveTLSSettings()
 
 	if ac.timeoutSecs, err = getDefaultScanTimeout(); err != nil {
 		return nil, err

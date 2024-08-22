@@ -10,7 +10,6 @@ import (
 	"flag"
 	"fmt"
 	"hash/fnv"
-	"io/ioutil"
 	"log"
 	"os"
 	"strconv"
@@ -48,27 +47,30 @@ func main() {
 	var path string
 	var grpcAddr string
 	var apiKey string
-	var enableTLS bool
+	var tls bool
+	var caCert string
 	var fileList []string
 	var region string
 	var pml bool
 	var feedback bool
 	var verbose bool
 	var tag string
+	var digest bool
 
 	flag.StringVar(&path, "path", "", "Path of file or directory to scan.")
 	flag.BoolVar(&scanGoodFiles, "good", false, "Specify if scanning good/non-malicious files.")
 	flag.BoolVar(&scanInParallel, "parallel", false, "Specify if scanning of files should happen in parallel")
 
-	flag.StringVar(&grpcAddr, "addr", "",
-		"the address to connect to for GRPC")
+	flag.StringVar(&grpcAddr, "addr", "", "the address to connect to for GRPC")
 	flag.StringVar(&apiKey, "apikey", "", "API key for service authentication")
-	flag.BoolVar(&enableTLS, "tls", false, "Specify to enable server authentication by client for GRPC")
+	flag.BoolVar(&tls, "tls", false, "enable/disable server authentication by client for GRPC")
 	flag.StringVar(&region, "region", "", "the region to connect to")
-	flag.BoolVar(&pml, "pml", false, "enable predictive machine learning detection")
-	flag.BoolVar(&feedback, "feedback", false, "enable SPN feedback")
-	flag.BoolVar(&verbose, "verbose", false, "enable verbose scan result")
+	flag.BoolVar(&pml, "pml", false, "enable/disable predictive machine learning detection")
+	flag.BoolVar(&feedback, "feedback", false, "enable/disable SPN feedback")
+	flag.BoolVar(&verbose, "verbose", false, "enable/disable verbose scan result")
 	flag.StringVar(&tag, "tag", "", "tags to be used for scanning")
+	flag.StringVar(&caCert, "ca_cert", "", "CA certificate for self hosted AMaaS server")
+	flag.BoolVar(&digest, "digest", true, "enable/disable verbose scan result")
 
 	flag.Parse()
 
@@ -83,7 +85,7 @@ func main() {
 			log.Fatalf("Unable to create AMaaS scan client object. error: %v", err)
 		}
 	} else if grpcAddr != "" {
-		ac, err = amaasclient.NewClientInternal(apiKey, grpcAddr, enableTLS)
+		ac, err = amaasclient.NewClientInternal(apiKey, grpcAddr, tls, caCert)
 		if err != nil {
 			log.Fatalf("Unable to create AMaaS scan client object. error: %v", err)
 		}
@@ -112,6 +114,10 @@ func main() {
 		ac.SetVerboseEnable()
 	}
 
+	if !digest {
+		ac.SetDigestDisable()
+	}
+
 	var tagsArray []string
 	if tag != "" {
 		tagsArray = strings.Split(tag, ",")
@@ -119,7 +125,7 @@ func main() {
 
 	if fileInfo.IsDir() {
 
-		files, err := ioutil.ReadDir(path)
+		files, err := os.ReadDir(path)
 		if err != nil {
 			log.Fatal(err)
 		}

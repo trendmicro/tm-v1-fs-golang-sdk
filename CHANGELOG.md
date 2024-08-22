@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 1.4.0 - 2024-08-21
+
+* Support digest calculation bypass
+
+## 1.3.0 - 2024-08-19
+
+* Update README.md
+* Support CA cert import
+
 ## 1.2.0 - 2024-07-05
 
 * Support verbose scan result
@@ -8,7 +17,7 @@
 
 * Update README.md
 * Extend default timeout to 300s
- 
+
 ## 1.1.1 - 2024-04-04
 
 * Fix bug in SPN smart feedback
@@ -18,7 +27,7 @@
 
 * Update protos
 * Enable PML (Predictive Machine Learning) detection and smart feedback
-* Enable bulk mode 
+* Enable bulk mode
 * Enable India region
 * Support for scanning large files (over 2GB)
 * Support socks5 proxy

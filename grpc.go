@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -36,7 +37,6 @@ const (
 	_envvarAuthKeyNotRequired = "TM_AM_AUTH_KEY_NOT_REQUIRED" // Set to 1 and Client SDK will not send auth key to server; set to 0 or leave empty to disable.
 	_envvarServerAddr         = "TM_AM_SERVER_ADDR"           // <host FQDN>:<port no>
 	_envvarDisableTLS         = "TM_AM_DISABLE_TLS"           // Set to 1 to not use TLS for client-server communication; set to 0 or leave empty otherwise.
-	_envvarDisableCertVerify  = "TM_AM_DISABLE_CERT_VERIFY"   // Set to 1 to not disable server certificate check by client; set to 0 or leave empty otherwise.
 	_envInitWindowSize        = "TM_AM_WINDOW_SIZE"
 
 	appNameHTTPHeader = "tm-app-name"
@@ -223,29 +223,30 @@ func (reader *AmaasClientBufferReader) Hash(algorithm string) (string, error) {
 ///////////////////////////////////////
 
 type AmaasClient struct {
-	conn         *grpc.ClientConn
-	isC1Token    bool
-	authKey      string
-	addr         string
-	useTLS       bool
-	verifyCert   bool
-	timeoutSecs  int
-	disableCache bool
-	appName      string
-	archHandler  AmaasClientArchiveHandler
-	pml          bool
-	feedback     bool
-	verbose      bool
+	conn        *grpc.ClientConn
+	isC1Token   bool
+	authKey     string
+	addr        string
+	useTLS      bool
+	caCert      string
+	timeoutSecs int
+	appName     string
+	archHandler AmaasClientArchiveHandler
+	pml         bool
+	feedback    bool
+	verbose     bool
+	digest      bool
 }
 
 func scanRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, dataReader AmaasClientReader,
-	disableCache bool, tags []string, pml bool, bulk bool, feedback bool, verbose bool) (string, error) {
+	tags []string, pml bool, bulk bool, feedback bool, verbose bool, digest bool) (string, error) {
 
 	defer cancel()
 
 	var stream pb.Scan_RunClient
 	var err error
 	var hashSha256 string
+	var hashSha1 string
 
 	// Validate the tags parameter
 	if tags != nil {
@@ -271,11 +272,10 @@ func scanRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, da
 
 	size, _ := dataReader.DataSize()
 
-	if !disableCache {
+	if digest {
 		hashSha256, _ = dataReader.Hash("sha256")
+		hashSha1, _ = dataReader.Hash("sha1")
 	}
-
-	hashSha1, _ := dataReader.Hash("sha1")
 
 	if err = runInitRequest(stream, dataReader.Identifier(), uint64(size), hashSha256, hashSha1, tags, pml, bulk, feedback,
 		verbose); err != nil {
@@ -425,8 +425,8 @@ func (ac *AmaasClient) bufferScanRun(buffer []byte, identifier string, tags []st
 
 	ctx = ac.buildAppNameContext(ctx)
 
-	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), bufferReader, ac.disableCache, tags, ac.pml, true, ac.feedback,
-		ac.verbose)
+	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), bufferReader, tags, ac.pml, true, ac.feedback,
+		ac.verbose, ac.digest)
 }
 
 func (ac *AmaasClient) fileScanRun(fileName string, tags []string) (string, error) {
@@ -456,8 +456,31 @@ func (ac *AmaasClient) fileScanRunNormalFile(fileName string, tags []string) (st
 
 	ctx = ac.buildAppNameContext(ctx)
 
-	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), fileReader, ac.disableCache, tags, ac.pml, true, ac.feedback,
-		ac.verbose)
+	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), fileReader, tags, ac.pml, true, ac.feedback,
+		ac.verbose, ac.digest)
+}
+
+// Function to load TLS credentials with optional certificate verification
+func loadTLSCredentials(caCertPath string) (credentials.TransportCredentials, error) {
+	logMsg(LogLevelDebug, "log TLS certificate = %s", caCertPath)
+	// Load the CA certificate
+	pemServerCA, err := os.ReadFile(caCertPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a certificate pool from the CA
+	certPool := x509.NewCertPool()
+	if !certPool.AppendCertsFromPEM(pemServerCA) {
+		return nil, err
+	}
+
+	// Create the TLS credentials with optional verification
+	creds := credentials.NewTLS(&tls.Config{
+		RootCAs: certPool,
+	})
+
+	return creds, nil
 }
 
 func (ac *AmaasClient) setupComm() error {
@@ -486,14 +509,27 @@ func (ac *AmaasClient) setupComm() error {
 
 	if ac.conn == nil {
 		if ac.useTLS {
+			var creds credentials.TransportCredentials
+			if ac.caCert != "" {
+				// Bring Your Own Certificate case
+				creds, err = loadTLSCredentials(ac.caCert)
+				if err != nil {
+					return err
+				}
+			} else {
+				// Default SSL credentials case
+				logMsg(LogLevelDebug, "using default SSL credential")
+				creds = credentials.NewTLS(&tls.Config{})
+			}
+
 			if enableProxy {
-				ac.conn, err = grpc.Dial(ac.addr, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{InsecureSkipVerify: !ac.verifyCert})),
+				ac.conn, err = grpc.Dial(ac.addr, grpc.WithTransportCredentials(creds),
 					grpc.WithInitialWindowSize(largerWindowSize),
 					grpc.WithInitialConnWindowSize(largerWindowSize),
 					grpc.WithContextDialer(d),
 				)
 			} else {
-				ac.conn, err = grpc.Dial(ac.addr, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{InsecureSkipVerify: !ac.verifyCert})),
+				ac.conn, err = grpc.Dial(ac.addr, grpc.WithTransportCredentials(creds),
 					grpc.WithInitialWindowSize(largerWindowSize),
 					grpc.WithInitialConnWindowSize(largerWindowSize),
 				)
@@ -667,11 +703,10 @@ func identifyServerAddr(region string) (string, error) {
 	return fmt.Sprintf("%s:%d", fqdn, _defaultCommPort), nil
 }
 
-func retrieveTLSSettings() (useTLS bool, verifyCert bool) {
+func retrieveTLSSettings() (useTLS bool) {
 	envDisableTLS := os.Getenv(_envvarDisableTLS)
-	envDisableCertVerify := os.Getenv(_envvarDisableCertVerify)
 
-	return (envDisableTLS == "" || envDisableTLS == "0"), (envDisableCertVerify == "" || envDisableCertVerify == "0")
+	return (envDisableTLS == "" || envDisableTLS == "0")
 }
 
 func getDefaultScanTimeout() (int, error) {
@@ -983,14 +1018,15 @@ func sanitizeGRPCError(err error) error {
 //
 //////////////////////////////////////////////////////////////
 
-func NewClientInternal(key string, addr string, useTLS bool) (*AmaasClient, error) {
+func NewClientInternal(key string, addr string, useTLS bool, caCert string) (*AmaasClient, error) {
 
 	ac := &AmaasClient{}
 
 	ac.authKey = key
 	ac.addr = addr
 	ac.useTLS = useTLS
-	ac.verifyCert = false
+	ac.caCert = caCert
+	ac.digest = true
 
 	ac.appName = appNameV1FS
 
@@ -1011,10 +1047,6 @@ func NewClientInternal(key string, addr string, useTLS bool) (*AmaasClient, erro
 	return ac, nil
 }
 
-func (ac *AmaasClient) SetCacheDisable() {
-	ac.disableCache = true
-}
-
 func (ac *AmaasClient) SetPMLEnable() {
 	ac.pml = true
 }
@@ -1025,6 +1057,10 @@ func (ac *AmaasClient) SetFeedbackEnable() {
 
 func (ac *AmaasClient) SetVerboseEnable() {
 	ac.verbose = true
+}
+
+func (ac *AmaasClient) SetDigestDisable() {
+	ac.digest = false
 }
 
 func validateTags(tags []string) error {

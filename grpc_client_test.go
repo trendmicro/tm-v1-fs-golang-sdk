@@ -218,22 +218,28 @@ func TestIdServerAddressValidWithOverride(t *testing.T) {
 func TestRetrieveTLSSettings(t *testing.T) {
 
 	os.Setenv(_envvarDisableTLS, "")
+	os.Setenv(_envvarDisableCertVerify, "")
 
-	useTLS := retrieveTLSSettings()
+	useTLS, verifyCert := retrieveTLSSettings()
 
 	assert.Equal(t, true, useTLS)
+	assert.Equal(t, true, verifyCert)
 
 	os.Setenv(_envvarDisableTLS, "0")
+	os.Setenv(_envvarDisableCertVerify, "0")
 
-	useTLS = retrieveTLSSettings()
+	useTLS, verifyCert = retrieveTLSSettings()
 
 	assert.Equal(t, true, useTLS)
+	assert.Equal(t, true, verifyCert)
 
 	os.Setenv(_envvarDisableTLS, "1")
+	os.Setenv(_envvarDisableCertVerify, "1")
 
-	useTLS = retrieveTLSSettings()
+	useTLS, verifyCert = retrieveTLSSettings()
 
 	assert.Equal(t, false, useTLS)
+	assert.Equal(t, false, verifyCert)
 }
 
 //

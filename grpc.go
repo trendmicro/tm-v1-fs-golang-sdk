@@ -37,6 +37,7 @@ const (
 	_envvarAuthKeyNotRequired = "TM_AM_AUTH_KEY_NOT_REQUIRED" // Set to 1 and Client SDK will not send auth key to server; set to 0 or leave empty to disable.
 	_envvarServerAddr         = "TM_AM_SERVER_ADDR"           // <host FQDN>:<port no>
 	_envvarDisableTLS         = "TM_AM_DISABLE_TLS"           // Set to 1 to not use TLS for client-server communication; set to 0 or leave empty otherwise.
+	_envvarDisableCertVerify  = "TM_AM_DISABLE_CERT_VERIFY"   // Set to 1 to disable server certificate check by client; set to 0 or leave empty to verify certificate.
 	_envInitWindowSize        = "TM_AM_WINDOW_SIZE"
 
 	appNameHTTPHeader = "tm-app-name"
@@ -229,6 +230,7 @@ type AmaasClient struct {
 	addr        string
 	useTLS      bool
 	caCert      string
+	verifyCert  bool
 	timeoutSecs int
 	appName     string
 	archHandler AmaasClientArchiveHandler
@@ -461,8 +463,8 @@ func (ac *AmaasClient) fileScanRunNormalFile(fileName string, tags []string) (st
 }
 
 // Function to load TLS credentials with optional certificate verification
-func loadTLSCredentials(caCertPath string) (credentials.TransportCredentials, error) {
-	logMsg(LogLevelDebug, "log TLS certificate = %s", caCertPath)
+func loadTLSCredentials(caCertPath string, verifyCert bool) (credentials.TransportCredentials, error) {
+	logMsg(LogLevelDebug, "log TLS certificate = %s cert verify = %t", caCertPath, verifyCert)
 	// Load the CA certificate
 	pemServerCA, err := os.ReadFile(caCertPath)
 	if err != nil {
@@ -477,7 +479,8 @@ func loadTLSCredentials(caCertPath string) (credentials.TransportCredentials, er
 
 	// Create the TLS credentials with optional verification
 	creds := credentials.NewTLS(&tls.Config{
-		RootCAs: certPool,
+		InsecureSkipVerify: !verifyCert,
+		RootCAs:            certPool,
 	})
 
 	return creds, nil
@@ -512,14 +515,14 @@ func (ac *AmaasClient) setupComm() error {
 			var creds credentials.TransportCredentials
 			if ac.caCert != "" {
 				// Bring Your Own Certificate case
-				creds, err = loadTLSCredentials(ac.caCert)
+				creds, err = loadTLSCredentials(ac.caCert, ac.verifyCert)
 				if err != nil {
 					return err
 				}
 			} else {
 				// Default SSL credentials case
-				logMsg(LogLevelDebug, "using default SSL credential")
-				creds = credentials.NewTLS(&tls.Config{})
+				logMsg(LogLevelDebug, "using default SSL credential with cert verify = %t", ac.verifyCert)
+				creds = credentials.NewTLS(&tls.Config{InsecureSkipVerify: !ac.verifyCert})
 			}
 
 			if enableProxy {
@@ -703,10 +706,11 @@ func identifyServerAddr(region string) (string, error) {
 	return fmt.Sprintf("%s:%d", fqdn, _defaultCommPort), nil
 }
 
-func retrieveTLSSettings() (useTLS bool) {
+func retrieveTLSSettings() (useTLS bool, verifyCert bool) {
 	envDisableTLS := os.Getenv(_envvarDisableTLS)
+	envDisableCertVerify := os.Getenv(_envvarDisableCertVerify)
 
-	return (envDisableTLS == "" || envDisableTLS == "0")
+	return (envDisableTLS == "" || envDisableTLS == "0"), envDisableCertVerify != "1"
 }
 
 func getDefaultScanTimeout() (int, error) {
@@ -1031,6 +1035,8 @@ func NewClientInternal(key string, addr string, useTLS bool, caCert string) (*Am
 	ac.appName = appNameV1FS
 
 	var err error
+
+	ac.useTLS, ac.verifyCert = retrieveTLSSettings()
 
 	if ac.timeoutSecs, err = getDefaultScanTimeout(); err != nil {
 		return nil, err

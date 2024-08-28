@@ -43,7 +43,7 @@ func NewClient(key string, region string) (c *AmaasClient, e error) {
 		return nil, err
 	}
 
-	ac.useTLS = retrieveTLSSettings()
+	ac.useTLS, ac.verifyCert = retrieveTLSSettings()
 
 	if ac.timeoutSecs, err = getDefaultScanTimeout(); err != nil {
 		return nil, err

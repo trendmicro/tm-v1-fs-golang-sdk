@@ -464,3 +464,9 @@ The communication channel between the client program or SDK and the Trend Vision
 The certificate employed by server-side TLS is a publicly-signed certificate from Trend Micro Inc, issued by a trusted Certificate Authority (CA), further bolstering security measures.
 
 The File Security SDK consistently adopts TLS as the default communication channel, prioritizing security at all times. It is strongly advised not to disable TLS in a production environment while utilizing the File Security SDK, as doing so could compromise the integrity and confidentiality of transmitted data.
+
+## Disabling certificate verification
+
+For customers who need to enable TLS channel encryption without verifying the provided CA certificate, the `TM_AM_DISABLE_CERT_VERIFY` environment variable can be set. However, this option is only recommended for use in testing environments.
+
+When `TM_AM_DISABLE_CERT_VERIFY` is set to `1`, certificate verification is disabled. By default, the certificate will be verified.

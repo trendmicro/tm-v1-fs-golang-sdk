@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 1.4.1 - 2024-08-27
+
+* Support certificate verification bypass using environment variable
+
 ## 1.4.0 - 2024-08-21
 
 * Support digest calculation bypass

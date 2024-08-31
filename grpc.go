@@ -1036,7 +1036,7 @@ func NewClientInternal(key string, addr string, useTLS bool, caCert string) (*Am
 
 	var err error
 
-	ac.useTLS, ac.verifyCert = retrieveTLSSettings()
+	_, ac.verifyCert = retrieveTLSSettings()
 
 	if ac.timeoutSecs, err = getDefaultScanTimeout(); err != nil {
 		return nil, err

@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 1.4.2 - 2024-08-30
+
+* Fixed the issue of the TLS parameter being overwritten
+
 ## 1.4.1 - 2024-08-27
 
 * Support certificate verification bypass using environment variable

@@ -27,6 +27,17 @@ const (
 	LogLevelDebug   LogLevel = 5
 )
 
+type AmaasClientReader interface {
+	// Return the identifier of the data source. For example, name of the file being read.
+	Identifier() string
+
+	// Return the total size of the data source.
+	DataSize() (int64, error)
+
+	// Return requested number of bytes from the data source starting at the specified offset.
+	ReadBytes(offset int64, length int32) ([]byte, error)
+}
+
 func NewClient(key string, region string) (c *AmaasClient, e error) {
 
 	ac := &AmaasClient{digest: true}
@@ -76,8 +87,14 @@ func (ac *AmaasClient) Destroy() {
 }
 
 //
-// The ScanFile() and ScanBuffer() functions are thread-safe and can be invoked by multiple threads,
+// The ScanFile(), ScanBuffer() and ScanReader() functions are thread-safe and can be invoked by multiple threads,
 // but all file scans must complete before Destroy() can be invoked.
+
+// If your application utilizes ScanReader() for scanning, it's advisable to deactivate digest feature by SetDigestDisable().
+// This is because the Digest feature requires the entire file to be read/feteched.
+//
+// For instance, scanning a cloud-based file requires downloading the entire file locally for digest calculation.
+// It increases network usage and processing time.
 //
 
 func (ac *AmaasClient) ScanFile(filePath string, tags []string) (resp string, e error) {
@@ -88,6 +105,11 @@ func (ac *AmaasClient) ScanFile(filePath string, tags []string) (resp string, e 
 func (ac *AmaasClient) ScanBuffer(buffer []byte, identifier string, tags []string) (resp string, e error) {
 	currentLogLevel = getLogLevel()
 	return ac.bufferScanRun(buffer, identifier, tags)
+}
+
+func (ac *AmaasClient) ScanReader(reader AmaasClientReader, tags []string) (resp string, e error) {
+	currentLogLevel = getLogLevel()
+	return ac.readerScanRun(reader, tags)
 }
 
 func (ac *AmaasClient) DumpConfig() (output string) {

@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 1.5.0 - 2024-12-16
+* Add `ScanReader` for scanning a well-implemented `AmaasClientReader`
+* Add example code `scan-s3obj` for scanning an S3 object which is an example of using `ScanReader`
+
 ## 1.4.2 - 2024-08-30
 
 * Fixed the issue of the TLS parameter being overwritten

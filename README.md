@@ -102,9 +102,50 @@ if err != nil {
 // Use the 'response' as needed
 ```
 
+### Scanning with AmaasClientReader
+
+```go
+type CustomReader struct {
+    ...
+}
+
+func newCustomReader() *CustomReader {
+    ...
+}
+
+func (r *CustomReader) Identifier() string {
+    // It returns the name of the file.
+}
+
+func (r *CustomReader) DataSize() (int64, error) {
+    // It should return the true size of the file in Reader.
+}
+
+func (r *CustomReader) ReadBytes(offset int64, length int32) (data []byte, err error) {
+    // It should return required number of data bytes starting from certain offset.
+}
+
+reader := newCustomReader()
+
+// It is recommended to disable digest when using AmaasReader.
+// Because it will trigger ReadBytes to read whole file,
+// network traffic will increase if it reads from the Internet.
+client.SetDigestDisable()
+
+response, err := client.ScanReader(reader, tags)
+if err != nil {
+    // Handle scanning error
+    panic(err)
+}
+
+// Use the 'response' as needed
+```
+
 **_Note_**
 
 - Max number of tags is 8. And the length of each tag can't exceed 63.
+- If user wants to take a look how to scan a S3 file without downloading the whole to the ground,
+  please refer to the [example code](examples/scan-s3obj/scan-s3obj.go) for further detail.
 
 ## Additional Functions
 

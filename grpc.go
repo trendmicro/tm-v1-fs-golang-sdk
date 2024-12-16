@@ -9,9 +9,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"golang.org/x/net/http/httpproxy"
-	"golang.org/x/net/proxy"
-	"google.golang.org/grpc/credentials/insecure"
 	"hash"
 	"io"
 	"log"
@@ -21,6 +18,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/net/http/httpproxy"
+	"golang.org/x/net/proxy"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"golang.org/x/exp/slices"
 
@@ -45,6 +46,7 @@ const (
 
 	maxTagsListSize = 8
 	maxTagSize      = 63
+	maxBatchSize    = int32(1024 * 1024)
 )
 
 type LogLevel int
@@ -58,14 +60,6 @@ var userLogger LoggerCallback = nil
 // AMaaS Client I/O interface and implementations
 //
 /////////////////////////////////////////////////
-
-type AmaasClientReader interface {
-	Identifier() string
-	DataSize() (int64, error)
-	ReadBytes(offset int64, length int32) ([]byte, error)
-	Close()
-	Hash(algorithm string) (string, error)
-}
 
 // File reader implementation
 
@@ -240,6 +234,49 @@ type AmaasClient struct {
 	digest      bool
 }
 
+func getHashValue(dataReader AmaasClientReader) (string, string, error) {
+	var offset, length int64
+
+	length, err := dataReader.DataSize()
+	if err != nil {
+		return "", "", err
+	}
+
+	sha1 := sha1.New()
+	sha256 := sha256.New()
+
+	for length > 0 {
+		var batch_size = maxBatchSize
+
+		if int64(batch_size) > length {
+			batch_size = int32(length)
+		}
+
+		bytes, err := dataReader.ReadBytes(offset, batch_size)
+		if err != nil || int32(len(bytes)) != batch_size {
+			return "", "", err
+		}
+
+		_, err = sha1.Write(bytes)
+		if err != nil {
+			return "", "", err
+		}
+
+		_, err = sha256.Write(bytes)
+		if err != nil {
+			return "", "", err
+		}
+
+		offset += int64(batch_size)
+		length -= int64(batch_size)
+	}
+
+	var s_sha1 = fmt.Sprintf("sha1:%s", hex.EncodeToString(sha1.Sum(nil)))
+	var s_sha256 = fmt.Sprintf("sha256:%s", hex.EncodeToString(sha256.Sum(nil)))
+
+	return s_sha1, s_sha256, nil
+}
+
 func scanRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, dataReader AmaasClientReader,
 	tags []string, pml bool, bulk bool, feedback bool, verbose bool, digest bool) (string, error) {
 
@@ -275,8 +312,7 @@ func scanRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, da
 	size, _ := dataReader.DataSize()
 
 	if digest {
-		hashSha256, _ = dataReader.Hash("sha256")
-		hashSha1, _ = dataReader.Hash("sha1")
+		hashSha1, hashSha256, _ = getHashValue(dataReader)
 	}
 
 	if err = runInitRequest(stream, dataReader.Identifier(), uint64(size), hashSha256, hashSha1, tags, pml, bulk, feedback,
@@ -459,6 +495,22 @@ func (ac *AmaasClient) fileScanRunNormalFile(fileName string, tags []string) (st
 	ctx = ac.buildAppNameContext(ctx)
 
 	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), fileReader, tags, ac.pml, true, ac.feedback,
+		ac.verbose, ac.digest)
+}
+
+func (ac *AmaasClient) readerScanRun(reader AmaasClientReader, tags []string) (string, error) {
+
+	if ac.conn == nil {
+		return "", makeInternalError(MSG("MSG_ID_ERR_CLIENT_NOT_READY"))
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(ac.timeoutSecs))
+
+	ctx = ac.buildAuthContext(ctx)
+
+	ctx = ac.buildAppNameContext(ctx)
+
+	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), reader, tags, ac.pml, true, ac.feedback,
 		ac.verbose, ac.digest)
 }
 

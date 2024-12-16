@@ -2,7 +2,11 @@ package client
 
 import (
 	"context"
+	"crypto/sha1"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"math/rand"
 	"os"
 	"testing"
@@ -43,6 +47,8 @@ const (
 type TestDat struct {
 	filesize int
 	filename string
+	sha1     string
+	sha256   string
 }
 
 func createTestDat(fnameTemplate string) *TestDat {
@@ -73,6 +79,15 @@ func createTestDat(fnameTemplate string) *TestDat {
 		b[i] = byte(i % 256)
 	}
 
+	sha1 := sha1.New()
+	sha1.Write(b)
+
+	sha256 := sha256.New()
+	sha256.Write(b)
+
+	d.sha1 = fmt.Sprintf("sha1:%s", hex.EncodeToString(sha1.Sum(nil)))
+	d.sha256 = fmt.Sprintf("sha256:%s", hex.EncodeToString(sha256.Sum(nil)))
+
 	if n, err := fd.Write(b); err != nil || n != d.filesize {
 		return nil
 	}
@@ -90,6 +105,14 @@ func (d *TestDat) Filename() string {
 
 func (d *TestDat) Filesize() int {
 	return d.filesize
+}
+
+func (d *TestDat) Sha1() string {
+	return d.sha1
+}
+
+func (d *TestDat) Sha256() string {
+	return d.sha256
 }
 
 // Test readFileBytes() function which is critical to client retrieval

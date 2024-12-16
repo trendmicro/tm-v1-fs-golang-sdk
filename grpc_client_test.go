@@ -495,6 +495,84 @@ func TestFileClientSha256WithUnsupportedAlgo(t *testing.T) {
 	assert.Error(t, err, "Unsupported algorithm for calculating the hash: sha224")
 }
 
+type MockAmassClientReader struct {
+	size int64
+}
+
+func NewMockAmassClientReader(size int64) *MockAmassClientReader {
+	return &MockAmassClientReader{size: size}
+}
+
+func (m *MockAmassClientReader) Identifier() string {
+	return "MockAmassClientReader"
+}
+
+func (m *MockAmassClientReader) DataSize() (int64, error) {
+	return m.size, nil
+}
+
+func (m *MockAmassClientReader) ReadBytes(offset int64, length int32) ([]byte, error) {
+	if offset < 0 || offset >= m.size {
+		return nil, fmt.Errorf("Invalid offset: %d", offset)
+	}
+
+	// always return an array filled with zero
+	return make([]byte, length), nil
+}
+
+func TestGetHashValue(t *testing.T) {
+
+	reader := NewMockAmassClientReader(1024*1024 - 301)
+	sha1, sha256, _ := getHashValue(reader)
+	assert.Equal(t, "sha1:5e944e68476189d048e74673b02a62dc42118cc8", sha1)
+	assert.Equal(t, "sha256:5746a33a622bbfd8d32a6398bbc04e90b3269787b17a9740b95e04a641a47935", sha256)
+
+	reader = NewMockAmassClientReader(1024*1024 - 1)
+	sha1, sha256, _ = getHashValue(reader)
+	assert.Equal(t, "sha1:24f30d3b09e9056c6b9f6dfd6f386c6828fd63c3", sha1)
+	assert.Equal(t, "sha256:ca7ed0c4a8e67cbdc461c4cb0d286d2fabbd9f0c41a7f42b665f72ebaa8aec56", sha256)
+
+	reader = NewMockAmassClientReader(1024*1024 + 0)
+	sha1, sha256, _ = getHashValue(reader)
+	assert.Equal(t, "sha1:3b71f43ff30f4b15b5cd85dd9e95ebc7e84eb5a3", sha1)
+	assert.Equal(t, "sha256:30e14955ebf1352266dc2ff8067e68104607e750abb9d3b36582b8af909fcb58", sha256)
+
+	reader = NewMockAmassClientReader(1024*1024 + 1)
+	sha1, sha256, _ = getHashValue(reader)
+	assert.Equal(t, "sha1:a84d35eda74338bd79a432f77d73f8ab5eb91902", sha1)
+	assert.Equal(t, "sha256:2cb74edba754a81d121c9db6833704a8e7d417e5b13d1a19f4a52f007d644264", sha256)
+
+	reader = NewMockAmassClientReader(1024*1024 + 244)
+	sha1, sha256, _ = getHashValue(reader)
+	assert.Equal(t, "sha1:5f054033c49f65dce7ca3d30519663db572b040c", sha1)
+	assert.Equal(t, "sha256:e8b900132db114bbe70361feb988e5f3b59c88f936b3e8fe924d448f0689f42c", sha256)
+}
+
+func TestGetHashValueWithBufferReader(t *testing.T) {
+	data := []byte("dummy")
+	reader, _ := InitBufferReader(data, "test")
+	sha1, sha256, _ := getHashValue(reader)
+	assert.Equal(t, "sha1:829c3804401b0727f70f73d4415e162400cbe57b", sha1)
+	assert.Equal(t, "sha256:b5a2c96250612366ea272ffac6d9744aaf4b45aacd96aa7cfcb931ee3b558259", sha256)
+
+	data = []byte("dummy1234567890")
+	reader, _ = InitBufferReader(data, "test")
+	sha1, sha256, _ = getHashValue(reader)
+	assert.Equal(t, "sha1:84901b8dc51ff505905443f863d6b6e8e6eca1f3", sha1)
+	assert.Equal(t, "sha256:e47a0a4d0e7da5ab6a5e331a0400157b09c44926224e9357308805ade4ae8141", sha256)
+}
+
+func TestGetHashValueWithFileReader(t *testing.T) {
+	dat := createTestDat("test.*.dat")
+	assert.NotNil(t, dat)
+	defer os.Remove(dat.Filename())
+
+	reader, _ := InitFileReader(dat.Filename())
+	sha1, sha256, _ := getHashValue(reader)
+	assert.Equal(t, dat.Sha1(), sha1)
+	assert.Equal(t, dat.Sha256(), sha256)
+}
+
 func TestCheckAuthKey(t *testing.T) {
 	tcs := []struct {
 		testCase       string

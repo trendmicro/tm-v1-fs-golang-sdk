@@ -807,6 +807,7 @@ func getServiceFQDN(targetRegion string) (string, error) {
 		C1_GB_REGION:    "antimalware.gb-1.cloudone.trendmicro.com",
 		C1_CA_REGION:    "antimalware.ca-1.cloudone.trendmicro.com",
 		C1_TREND_REGION: "antimalware.trend-us-1.cloudone.trendmicro.com",
+		C1_AE_REGION:    "antimalware.ae-1.cloudone.trendmicro.com",
 	}
 
 	fqdn, exists := mapping[region]

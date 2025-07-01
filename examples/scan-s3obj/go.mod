@@ -1,6 +1,10 @@
 module github.com/trendmicro/tm-v1-fs-golang-sdk/examples/scan-s3obj
 
-go 1.23
+go 1.23.0
+
+toolchain go1.24.2
+
+replace github.com/trendmicro/tm-v1-fs-golang-sdk => ../../
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.32.5 // indirect
@@ -19,18 +23,17 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.28.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.33.1 // indirect
 	github.com/aws/smithy-go v1.22.1 // indirect
-	github.com/golang/protobuf v1.5.4 // indirect
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d // indirect
-	golang.org/x/net v0.33.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240311173647-c811ad7063a7 // indirect
-	google.golang.org/grpc v1.62.1 // indirect
-	google.golang.org/protobuf v1.33.0 // indirect
+	golang.org/x/net v0.38.0 // indirect
+	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/text v0.23.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250324211829-b45e905df463 // indirect
+	google.golang.org/grpc v1.73.0 // indirect
+	google.golang.org/protobuf v1.36.6 // indirect
 )
 
 require (
-	github.com/trendmicro/tm-v1-fs-golang-sdk v0.0.0-20241119105152-8e5832d37e21
+	github.com/trendmicro/tm-v1-fs-golang-sdk v0.0.0
 	github.com/aws/aws-sdk-go-v2/config v1.28.5
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.67.1
 )

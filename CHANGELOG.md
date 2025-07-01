@@ -1,11 +1,16 @@
 # CHANGELOG
 
+## 1.6.0 - 2025-06-30
+
+* Add active content detection support via `SetActiveContentEnable` function
+
 ## 1.5.1 - 2025-03-03
 
 * Support new region me-central-1
 * Fix CVE-2023-45288
 
 ## 1.5.0 - 2024-12-16
+
 * Add `ScanReader` for scanning a well-implemented `AmaasClientReader`
 * Add example code `scan-s3obj` for scanning an S3 object which is an example of using `ScanReader`
 

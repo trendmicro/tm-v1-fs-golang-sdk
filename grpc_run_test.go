@@ -482,7 +482,7 @@ func TestScanRunWithInvalidTags(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(180))
 
 			// act
-			_, err := scanRun(ctx, cancel, nil, nil, tt.tags, false, true, false, false, true)
+			_, err := scanRun(ctx, cancel, nil, nil, tt.tags, false, true, false, false, false, true)
 
 			// assert
 			assert.Equal(t, tt.expectedErr, err.Error())

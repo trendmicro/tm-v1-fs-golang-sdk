@@ -218,20 +218,21 @@ func (reader *AmaasClientBufferReader) Hash(algorithm string) (string, error) {
 ///////////////////////////////////////
 
 type AmaasClient struct {
-	conn        *grpc.ClientConn
-	isC1Token   bool
-	authKey     string
-	addr        string
-	useTLS      bool
-	caCert      string
-	verifyCert  bool
-	timeoutSecs int
-	appName     string
-	archHandler AmaasClientArchiveHandler
-	pml         bool
-	feedback    bool
-	verbose     bool
-	digest      bool
+	conn          *grpc.ClientConn
+	isC1Token     bool
+	authKey       string
+	addr          string
+	useTLS        bool
+	caCert        string
+	verifyCert    bool
+	timeoutSecs   int
+	appName       string
+	archHandler   AmaasClientArchiveHandler
+	pml           bool
+	feedback      bool
+	verbose       bool
+	activeContent bool
+	digest        bool
 }
 
 func getHashValue(dataReader AmaasClientReader) (string, string, error) {
@@ -278,7 +279,7 @@ func getHashValue(dataReader AmaasClientReader) (string, string, error) {
 }
 
 func scanRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, dataReader AmaasClientReader,
-	tags []string, pml bool, bulk bool, feedback bool, verbose bool, digest bool) (string, error) {
+	tags []string, pml bool, bulk bool, feedback bool, verbose bool, activeContent bool, digest bool) (string, error) {
 
 	defer cancel()
 
@@ -316,7 +317,7 @@ func scanRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, da
 	}
 
 	if err = runInitRequest(stream, dataReader.Identifier(), uint64(size), hashSha256, hashSha1, tags, pml, bulk, feedback,
-		verbose); err != nil {
+		verbose, activeContent); err != nil {
 		return makeFailedScanJSONResp(), err
 	}
 
@@ -333,10 +334,10 @@ func scanRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, da
 }
 
 func runInitRequest(stream pb.Scan_RunClient, identifier string, dataSize uint64, hashSha256 string, hashSha1 string,
-	tags []string, pml bool, bulk bool, feedback bool, verbose bool) error {
+	tags []string, pml bool, bulk bool, feedback bool, verbose bool, activeContent bool) error {
 	if err := stream.Send(&pb.C2S{Stage: pb.Stage_STAGE_INIT,
 		FileName: identifier, RsSize: dataSize, FileSha256: hashSha256, FileSha1: hashSha1, Tags: tags, Trendx: pml,
-		Bulk: bulk, SpnFeedback: feedback, Verbose: verbose}); err != nil {
+		Bulk: bulk, SpnFeedback: feedback, Verbose: verbose, ActiveContent: activeContent}); err != nil {
 
 		_, receiveErr := stream.Recv()
 		if receiveErr != nil {
@@ -464,7 +465,7 @@ func (ac *AmaasClient) bufferScanRun(buffer []byte, identifier string, tags []st
 	ctx = ac.buildAppNameContext(ctx)
 
 	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), bufferReader, tags, ac.pml, true, ac.feedback,
-		ac.verbose, ac.digest)
+		ac.verbose, ac.activeContent, ac.digest)
 }
 
 func (ac *AmaasClient) fileScanRun(fileName string, tags []string) (string, error) {
@@ -495,7 +496,7 @@ func (ac *AmaasClient) fileScanRunNormalFile(fileName string, tags []string) (st
 	ctx = ac.buildAppNameContext(ctx)
 
 	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), fileReader, tags, ac.pml, true, ac.feedback,
-		ac.verbose, ac.digest)
+		ac.verbose, ac.activeContent, ac.digest)
 }
 
 func (ac *AmaasClient) readerScanRun(reader AmaasClientReader, tags []string) (string, error) {
@@ -511,7 +512,7 @@ func (ac *AmaasClient) readerScanRun(reader AmaasClientReader, tags []string) (s
 	ctx = ac.buildAppNameContext(ctx)
 
 	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), reader, tags, ac.pml, true, ac.feedback,
-		ac.verbose, ac.digest)
+		ac.verbose, ac.activeContent, ac.digest)
 }
 
 // Function to load TLS credentials with optional certificate verification
@@ -578,26 +579,26 @@ func (ac *AmaasClient) setupComm() error {
 			}
 
 			if enableProxy {
-				ac.conn, err = grpc.Dial(ac.addr, grpc.WithTransportCredentials(creds),
+				ac.conn, err = grpc.NewClient(ac.addr, grpc.WithTransportCredentials(creds),
 					grpc.WithInitialWindowSize(largerWindowSize),
 					grpc.WithInitialConnWindowSize(largerWindowSize),
 					grpc.WithContextDialer(d),
 				)
 			} else {
-				ac.conn, err = grpc.Dial(ac.addr, grpc.WithTransportCredentials(creds),
+				ac.conn, err = grpc.NewClient(ac.addr, grpc.WithTransportCredentials(creds),
 					grpc.WithInitialWindowSize(largerWindowSize),
 					grpc.WithInitialConnWindowSize(largerWindowSize),
 				)
 			}
 		} else {
 			if enableProxy {
-				ac.conn, err = grpc.Dial(ac.addr, grpc.WithTransportCredentials(insecure.NewCredentials()),
+				ac.conn, err = grpc.NewClient(ac.addr, grpc.WithTransportCredentials(insecure.NewCredentials()),
 					grpc.WithInitialWindowSize(largerWindowSize),
 					grpc.WithInitialConnWindowSize(largerWindowSize),
 					grpc.WithContextDialer(d),
 				)
 			} else {
-				ac.conn, err = grpc.Dial(ac.addr, grpc.WithTransportCredentials(insecure.NewCredentials()),
+				ac.conn, err = grpc.NewClient(ac.addr, grpc.WithTransportCredentials(insecure.NewCredentials()),
 					grpc.WithInitialWindowSize(largerWindowSize),
 					grpc.WithInitialConnWindowSize(largerWindowSize))
 			}
@@ -1116,6 +1117,10 @@ func (ac *AmaasClient) SetFeedbackEnable() {
 
 func (ac *AmaasClient) SetVerboseEnable() {
 	ac.verbose = true
+}
+
+func (ac *AmaasClient) SetActiveContentEnable() {
+	ac.activeContent = true
 }
 
 func (ac *AmaasClient) SetDigestDisable() {

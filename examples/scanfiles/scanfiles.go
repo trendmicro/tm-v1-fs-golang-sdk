@@ -54,6 +54,7 @@ func main() {
 	var pml bool
 	var feedback bool
 	var verbose bool
+	var activeContent bool
 	var tag string
 	var digest bool
 
@@ -68,6 +69,7 @@ func main() {
 	flag.BoolVar(&pml, "pml", false, "enable/disable predictive machine learning detection")
 	flag.BoolVar(&feedback, "feedback", false, "enable/disable SPN feedback")
 	flag.BoolVar(&verbose, "verbose", false, "enable/disable verbose scan result")
+	flag.BoolVar(&activeContent, "active-content", false, "enable/disable active content detection")
 	flag.StringVar(&tag, "tag", "", "tags to be used for scanning")
 	flag.StringVar(&caCert, "ca_cert", "", "CA certificate for self hosted AMaaS server")
 	flag.BoolVar(&digest, "digest", true, "enable/disable verbose scan result")
@@ -112,6 +114,10 @@ func main() {
 
 	if verbose {
 		ac.SetVerboseEnable()
+	}
+
+	if activeContent {
+		ac.SetActiveContentEnable()
 	}
 
 	if !digest {

@@ -192,6 +192,20 @@ You can enable verbose scan result by calling the `SetVerboseEnable` function:
 client.SetVerboseEnable()
 ```
 
+### Enable Active Content Detection
+
+Enables active content detection for scanning operations. This feature allows the scanner to detect potentially malicious active content within files, specifically:
+
+- **PDF scripts**: Detects embedded JavaScript and other scripting content in PDF files
+- **Office macros**: Detects VBA macros and other executable content in Microsoft Office documents
+
+When active content is detected, the scan result will include a type field with values of either `macro` or `script` to indicate the type of active content found.
+
+```go
+client.SetActiveContentEnable()
+```
+
+
 ### Disable Digest Calculation
 
 You can disable digest calculation by calling the `SetDigestDisable` function:
@@ -420,6 +434,9 @@ Specify to enable SPN feedback
 `-verbose`
 Specify to enable verbose scan result
 
+`-active-content`
+Specify to enable active content detection
+
 `-tag <string>`
 Specify the tags to be used for scanning, separated by commas
 
@@ -463,6 +480,9 @@ Specify to enable SPN feedback
 
 `-verbose`
 Specify to enable verbose scan result
+
+`-active-content`
+Specify to enable active content detection
 
 `-tag <string>`
 Specify the tags to be used for scanning, separated by commas

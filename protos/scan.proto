@@ -30,6 +30,7 @@ message C2S {
   bool bulk = 10;
   bool spn_feedback = 11;
   bool verbose = 12;
+  bool active_content = 13;
 }
 
 enum Command {

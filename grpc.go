@@ -218,21 +218,22 @@ func (reader *AmaasClientBufferReader) Hash(algorithm string) (string, error) {
 ///////////////////////////////////////
 
 type AmaasClient struct {
-	conn          *grpc.ClientConn
-	isC1Token     bool
-	authKey       string
-	addr          string
-	useTLS        bool
-	caCert        string
-	verifyCert    bool
-	timeoutSecs   int
-	appName       string
-	archHandler   AmaasClientArchiveHandler
-	pml           bool
-	feedback      bool
-	verbose       bool
-	activeContent bool
-	digest        bool
+	conn           *grpc.ClientConn
+	isC1Token      bool
+	authKey        string
+	addr           string
+	useTLS         bool
+	caCert         string
+	verifyCert     bool
+	timeoutSecs    int
+	appName        string
+	archHandler    AmaasClientArchiveHandler
+	pml            bool
+	feedback       bool
+	verbose        bool
+	activeContent  bool
+	digest         bool
+	cloudAccountID string
 }
 
 func getHashValue(dataReader AmaasClientReader) (string, string, error) {
@@ -446,8 +447,7 @@ func runUploadLoop(stream pb.Scan_RunClient, dataReader AmaasClientReader, bulk 
 	return
 }
 
-func (ac *AmaasClient) bufferScanRun(buffer []byte, identifier string, tags []string) (string, error) {
-
+func (ac *AmaasClient) bufferScanRun(ctx context.Context, buffer []byte, identifier string, tags []string) (string, error) {
 	if ac.conn == nil {
 		return "", makeInternalError(MSG("MSG_ID_ERR_CLIENT_NOT_READY"))
 	}
@@ -458,18 +458,20 @@ func (ac *AmaasClient) bufferScanRun(buffer []byte, identifier string, tags []st
 	}
 	defer bufferReader.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(ac.timeoutSecs))
+	ctx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(ac.timeoutSecs))
 
 	ctx = ac.buildAuthContext(ctx)
 
 	ctx = ac.buildAppNameContext(ctx)
 
-	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), bufferReader, tags, ac.pml, true, ac.feedback,
+	tags = ac.appendCloudAccountIDToTags(tags)
+
+	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), bufferReader,
+		tags, ac.pml, true, ac.feedback,
 		ac.verbose, ac.activeContent, ac.digest)
 }
 
-func (ac *AmaasClient) fileScanRun(fileName string, tags []string) (string, error) {
-
+func (ac *AmaasClient) fileScanRun(ctx context.Context, fileName string, tags []string) (string, error) {
 	if ac.conn == nil {
 		return "", makeInternalError(MSG("MSG_ID_ERR_CLIENT_NOT_READY"))
 	}
@@ -478,10 +480,10 @@ func (ac *AmaasClient) fileScanRun(fileName string, tags []string) (string, erro
 		return ac.archHandler.fileScanRun(fileName)
 	}
 
-	return ac.fileScanRunNormalFile(fileName, tags)
+	return ac.fileScanRunNormalFile(ctx, fileName, tags)
 }
 
-func (ac *AmaasClient) fileScanRunNormalFile(fileName string, tags []string) (string, error) {
+func (ac *AmaasClient) fileScanRunNormalFile(ctx context.Context, fileName string, tags []string) (string, error) {
 
 	fileReader, err := InitFileReader(fileName)
 	if err != nil {
@@ -489,29 +491,35 @@ func (ac *AmaasClient) fileScanRunNormalFile(fileName string, tags []string) (st
 	}
 	defer fileReader.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(ac.timeoutSecs))
+	ctx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(ac.timeoutSecs))
 
 	ctx = ac.buildAuthContext(ctx)
 
 	ctx = ac.buildAppNameContext(ctx)
 
-	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), fileReader, tags, ac.pml, true, ac.feedback,
+	tags = ac.appendCloudAccountIDToTags(tags)
+
+	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), fileReader,
+		tags, ac.pml, true, ac.feedback,
 		ac.verbose, ac.activeContent, ac.digest)
 }
 
-func (ac *AmaasClient) readerScanRun(reader AmaasClientReader, tags []string) (string, error) {
+func (ac *AmaasClient) readerScanRun(ctx context.Context, reader AmaasClientReader, tags []string) (string, error) {
 
 	if ac.conn == nil {
 		return "", makeInternalError(MSG("MSG_ID_ERR_CLIENT_NOT_READY"))
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(ac.timeoutSecs))
+	ctx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(ac.timeoutSecs))
 
 	ctx = ac.buildAuthContext(ctx)
 
 	ctx = ac.buildAppNameContext(ctx)
 
-	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), reader, tags, ac.pml, true, ac.feedback,
+	tags = ac.appendCloudAccountIDToTags(tags)
+
+	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), reader,
+		tags, ac.pml, true, ac.feedback,
 		ac.verbose, ac.activeContent, ac.digest)
 }
 
@@ -1127,6 +1135,22 @@ func (ac *AmaasClient) SetDigestDisable() {
 	ac.digest = false
 }
 
+func (ac *AmaasClient) SetCloudAccountID(cloudAccountID string) error {
+	if cloudAccountID == "" {
+		ac.cloudAccountID = cloudAccountID
+		return nil
+	}
+
+	// Calculate the total tag length with "cloudAccountId=" prefix
+	cloudAccountTag := fmt.Sprintf("cloudAccountId=%s", cloudAccountID)
+	if len(cloudAccountTag) > maxTagSize {
+		return fmt.Errorf("cloudAccountID tag 'cloudAccountId=%s' exceeds maximum tag size of %d characters", cloudAccountID, maxTagSize)
+	}
+
+	ac.cloudAccountID = cloudAccountID
+	return nil
+}
+
 func validateTags(tags []string) error {
 	if len(tags) == 0 {
 		return errors.New("tags cannot be empty")
@@ -1145,4 +1169,24 @@ func validateTags(tags []string) error {
 		}
 	}
 	return nil
+}
+
+func (ac *AmaasClient) appendCloudAccountIDToTags(tags []string) []string {
+	if ac.cloudAccountID == "" {
+		return tags
+	}
+
+	cloudAccountTag := fmt.Sprintf("cloudAccountId=%s", ac.cloudAccountID)
+
+	// Check if the cloudAccountTag exceeds maxTagSize (63 characters)
+	if len(cloudAccountTag) > maxTagSize {
+		logMsg(LogLevelWarning, "cloudAccountId tag exceeds maximum tag size (%d), skipping", maxTagSize)
+		return tags
+	}
+
+	if tags == nil {
+		return []string{cloudAccountTag}
+	}
+
+	return append(tags, cloudAccountTag)
 }

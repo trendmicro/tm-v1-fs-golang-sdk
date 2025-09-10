@@ -642,3 +642,149 @@ func generateJwtToken() (string, error) {
 
 	return ss, nil
 }
+
+//
+// CloudAccountID related tests
+//
+
+func TestSetCloudAccountIDValid(t *testing.T) {
+	ac := &AmaasClient{}
+
+	// Test with AWS account ID (12 digits)
+	err := ac.SetCloudAccountID("633537927402")
+	assert.Nil(t, err)
+	assert.Equal(t, "633537927402", ac.cloudAccountID)
+
+	// Test with Azure UUID-v4 (36 characters)
+	err = ac.SetCloudAccountID("a47ac10b-58cc-4372-a567-0e02b2c3d479")
+	assert.Nil(t, err)
+	assert.Equal(t, "a47ac10b-58cc-4372-a567-0e02b2c3d479", ac.cloudAccountID)
+
+	// Test with exactly 48 characters (63 - 15 for "cloudAccountId=")
+	longButValid := "123456789012345678901234567890123456789012345678"
+	err = ac.SetCloudAccountID(longButValid)
+	assert.Nil(t, err)
+	assert.Equal(t, longButValid, ac.cloudAccountID)
+}
+
+func TestSetCloudAccountIDTooLong(t *testing.T) {
+	ac := &AmaasClient{}
+
+	// Test with string longer than 48 characters (49 chars)
+	tooLong := "1234567890123456789012345678901234567890123456789"
+	err := ac.SetCloudAccountID(tooLong)
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "exceeds maximum tag size of 63 characters")
+	assert.Equal(t, "", ac.cloudAccountID)
+}
+
+func TestSetCloudAccountIDEmpty(t *testing.T) {
+	ac := &AmaasClient{}
+
+	// Test with empty string (should be allowed)
+	err := ac.SetCloudAccountID("")
+	assert.Nil(t, err)
+	assert.Equal(t, "", ac.cloudAccountID)
+}
+
+func TestAppendCloudAccountIDToTagsWithEmpty(t *testing.T) {
+	ac := &AmaasClient{}
+	ac.cloudAccountID = ""
+
+	// Test with nil tags
+	result := ac.appendCloudAccountIDToTags(nil)
+	assert.Nil(t, result)
+
+	// Test with empty tags slice
+	tags := []string{}
+	result = ac.appendCloudAccountIDToTags(tags)
+	assert.Equal(t, tags, result)
+
+	// Test with existing tags
+	tags = []string{"tag1", "tag2"}
+	result = ac.appendCloudAccountIDToTags(tags)
+	assert.Equal(t, tags, result)
+}
+
+func TestAppendCloudAccountIDToTagsWithValue(t *testing.T) {
+	ac := &AmaasClient{}
+	ac.cloudAccountID = "633537927402"
+
+	// Test with nil tags
+	result := ac.appendCloudAccountIDToTags(nil)
+	expected := []string{"cloudAccountId=633537927402"}
+	assert.Equal(t, expected, result)
+
+	// Test with empty tags slice
+	tags := []string{}
+	result = ac.appendCloudAccountIDToTags(tags)
+	expected = []string{"cloudAccountId=633537927402"}
+	assert.Equal(t, expected, result)
+
+	// Test with existing tags
+	tags = []string{"tag1", "tag2"}
+	result = ac.appendCloudAccountIDToTags(tags)
+	expected = []string{"tag1", "tag2", "cloudAccountId=633537927402"}
+	assert.Equal(t, expected, result)
+}
+
+func TestAppendCloudAccountIDToTagsImmutability(t *testing.T) {
+	ac := &AmaasClient{}
+	ac.cloudAccountID = "633537927402"
+
+	// Test that original tags slice is not modified
+	originalTags := []string{"tag1", "tag2"}
+	originalTagsCopy := make([]string, len(originalTags))
+	copy(originalTagsCopy, originalTags)
+
+	result := ac.appendCloudAccountIDToTags(originalTags)
+
+	// Original slice should remain unchanged
+	assert.Equal(t, originalTagsCopy, originalTags)
+	// Result should contain cloudAccountID
+	expected := []string{"tag1", "tag2", "cloudAccountId=633537927402"}
+	assert.Equal(t, expected, result)
+}
+
+func TestCloudAccountIDIntegrationWithScanMethods(t *testing.T) {
+	// Create a mock AmaasClient with connection set to nil (to trigger early return)
+	ac := &AmaasClient{
+		conn: nil,
+	}
+
+	// Set cloudAccountID
+	err := ac.SetCloudAccountID("633537927402")
+	assert.Nil(t, err)
+
+	// Test ScanFile with cloudAccountID
+	_, err = ac.ScanFile("nonexistent.txt", []string{"tag1"})
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "Client is not ready")
+
+	// Test ScanBuffer with cloudAccountID
+	_, err = ac.ScanBuffer([]byte("test"), "buffer", []string{"tag1"})
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "Client is not ready")
+
+	// Test ScanReader with cloudAccountID
+	bufferReader, _ := InitBufferReader([]byte("test"), "reader")
+	_, err = ac.ScanReader(bufferReader, []string{"tag1"})
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "Client is not ready")
+
+	bufferReader.Close()
+}
+
+func TestAppendCloudAccountIDToTagsTooLong(t *testing.T) {
+	ac := &AmaasClient{}
+	
+	// Set a cloudAccountID that would make the tag too long (49 characters)
+	ac.cloudAccountID = "1234567890123456789012345678901234567890123456789" // 49 chars
+	
+	// Test with existing tags - should skip the cloudAccountID
+	tags := []string{"tag1", "tag2"}
+	result := ac.appendCloudAccountIDToTags(tags)
+	
+	// Should return original tags unchanged (cloudAccountID skipped due to length)
+	assert.Equal(t, tags, result)
+}

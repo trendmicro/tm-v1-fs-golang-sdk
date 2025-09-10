@@ -98,18 +98,36 @@ func (ac *AmaasClient) Destroy() {
 //
 
 func (ac *AmaasClient) ScanFile(filePath string, tags []string) (resp string, e error) {
+	ctx := context.Background()
 	currentLogLevel = getLogLevel()
-	return ac.fileScanRun(filePath, tags)
+	return ac.fileScanRun(ctx, filePath, tags)
+}
+
+func (ac *AmaasClient) ScanFileWithContext(ctx context.Context, filePath string, tags []string) (resp string, e error) {
+	currentLogLevel = getLogLevel()
+	return ac.fileScanRun(ctx, filePath, tags)
 }
 
 func (ac *AmaasClient) ScanBuffer(buffer []byte, identifier string, tags []string) (resp string, e error) {
+	ctx := context.Background()
 	currentLogLevel = getLogLevel()
-	return ac.bufferScanRun(buffer, identifier, tags)
+	return ac.bufferScanRun(ctx, buffer, identifier, tags)
+}
+
+func (ac *AmaasClient) ScanBufferWithContext(ctx context.Context, buffer []byte, identifier string, tags []string) (resp string, e error) {
+	currentLogLevel = getLogLevel()
+	return ac.bufferScanRun(ctx, buffer, identifier, tags)
 }
 
 func (ac *AmaasClient) ScanReader(reader AmaasClientReader, tags []string) (resp string, e error) {
+	ctx := context.Background()
 	currentLogLevel = getLogLevel()
-	return ac.readerScanRun(reader, tags)
+	return ac.readerScanRun(ctx, reader, tags)
+}
+
+func (ac *AmaasClient) ScanReaderWithContext(ctx context.Context, reader AmaasClientReader, tags []string) (resp string, e error) {
+	currentLogLevel = getLogLevel()
+	return ac.readerScanRun(ctx, reader, tags)
 }
 
 func (ac *AmaasClient) DumpConfig() (output string) {

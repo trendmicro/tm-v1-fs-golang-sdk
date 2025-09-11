@@ -214,6 +214,21 @@ You can disable digest calculation by calling the `SetDigestDisable` function:
 client.SetDigestDisable()
 ```
 
+### Set Cloud Account ID
+
+You can set a cloud account ID that will be automatically appended to all scan tags in the format `cloudAccountId=value`:
+
+```go
+err := client.SetCloudAccountID("633537927402")
+if err != nil {
+    // Handle error - cloudAccountID too long
+}
+```
+
+**Note**: 
+- The total tag length (including `cloudAccountId=` prefix) cannot exceed 63 characters
+- Using cloud account ID occupies one tag slot, reducing max customer tags from 8 to 7
+
 ## Golang Client SDK API Reference
 
 ### ```func NewClient(key string, region string) (c *AmaasClient, e error)```

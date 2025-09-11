@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 1.6.1 - 2025-09-11
+
+* Add customized cloud account id setting via `SetCloudAccountID` function
+
 ## 1.6.0 - 2025-06-30
 
 * Add active content detection support via `SetActiveContentEnable` function

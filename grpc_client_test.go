@@ -140,8 +140,8 @@ func TestGetServiceFQDNMappingVisionOne(t *testing.T) {
 		"sg-1": "ap-southeast-1",
 		"au-1": "ap-southeast-2",
 		"jp-1": "ap-northeast-1",
-		// "gb-1": "",
-		// "ca-1": "",
+		"gb-1": "eu-west-2",
+		"ca-1": "ca-central-1",
 		// "trend-us-1": "",
 		"ae-1": "me-central-1",
 	}

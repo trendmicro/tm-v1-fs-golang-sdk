@@ -240,7 +240,7 @@ Creates a new instance of the client object, and provisions essential settings, 
 | Parameter       | Description                                                                                                                                                                                  |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | key (string)    | A valid API key must be provided if the environment variable `TM_AM_AUTH_KEY` is not set.                                                                                                    |
-| region (string) | The region you obtained your api key.  Value provided must be one of the Vision One regions: `us-east-1`, `eu-central-1`, `ap-southeast-1`, `ap-southeast-2`, `ap-northeast-1`, `ap-south-1`, `me-central-1` |
+| region (string) | The region you obtained your api key.  Value provided must be one of the Vision One regions: `us-east-1`, `eu-central-1`, `eu-west-2`, `ca-central-1`, `ap-southeast-1`, `ap-southeast-2`, `ap-northeast-1`, `ap-south-1`, `me-central-1` |
 
 **_Return values_**
 

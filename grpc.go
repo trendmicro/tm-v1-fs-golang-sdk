@@ -55,6 +55,10 @@ type LoggerCallback func(level LogLevel, levelStr string, format string, a ...in
 var currentLogLevel LogLevel = LogLevelOff
 var userLogger LoggerCallback = nil
 
+type contextKey string
+
+const ContextKeySHA256 contextKey = "sha256"
+
 /////////////////////////////////////////////////
 //
 // AMaaS Client I/O interface and implementations
@@ -313,6 +317,13 @@ func scanRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, da
 
 	size, _ := dataReader.DataSize()
 
+	if val := ctx.Value(ContextKeySHA256); val != nil {
+		if hashVal, ok := val.(string); ok {
+			hashSha256 = hashVal
+			logMsg(LogLevelDebug, MSG("MSG_ID_DEBUG_SHA256_FROM_CTX"), hashSha256)
+		}
+	}
+
 	if digest {
 		hashSha1, hashSha256, _ = getHashValue(dataReader)
 	}
@@ -521,6 +532,389 @@ func (ac *AmaasClient) readerScanRun(ctx context.Context, reader AmaasClientRead
 	return scanRun(ctx, cancel, pb.NewScanClient(ac.conn), reader,
 		tags, ac.pml, true, ac.feedback,
 		ac.verbose, ac.activeContent, ac.digest)
+}
+
+// encodeRun handles the bidirectional streaming encode operation
+func encodeRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, dataReader AmaasClientReader, writer io.WriterAt) error {
+
+	defer cancel()
+
+	var stream pb.Scan_EncodeClient
+	var err error
+
+	// Setup the stream
+	if stream, err = c.Encode(ctx); err != nil {
+		logMsg(LogLevelError, MSG("MSG_ID_ERR_SETUP_STREAM"), err)
+		return sanitizeGRPCError(err)
+	}
+
+	defer func(stream pb.Scan_EncodeClient) {
+		err := stream.CloseSend()
+		if err != nil {
+			panic(err)
+		}
+	}(stream)
+
+	// Get data size
+	size, err := dataReader.DataSize()
+	if err != nil {
+		return err
+	}
+
+	// Send init message
+	if err = encodeInitRequest(stream, uint64(size)); err != nil {
+		return err
+	}
+
+	// Handle encode upload/download loop
+	if err = encodeUploadLoop(stream, dataReader, writer); err != nil {
+		return err
+	}
+
+	logMsg(LogLevelDebug, "Encode completed successfully")
+
+	return nil
+}
+
+// encodeInitRequest sends the initial message with total input size
+func encodeInitRequest(stream pb.Scan_EncodeClient, dataSize uint64) error {
+	initMsg := &pb.EncodeC2S{
+		Payload: &pb.EncodeC2S_Init{
+			Init: &pb.TransformInit{
+				FileSize: dataSize,
+			},
+		},
+	}
+
+	if err := stream.Send(initMsg); err != nil {
+		logMsg(LogLevelError, MSG("MSG_ID_ERR_INIT"), err)
+		return sanitizeGRPCError(err)
+	}
+
+	return nil
+}
+
+// encodeUploadLoop handles the bidirectional communication for encode operation
+func encodeUploadLoop(stream pb.Scan_EncodeClient, dataReader AmaasClientReader, writer io.WriterAt) error {
+	var totalBytesWritten int64
+
+	for {
+		in, err := stream.Recv()
+
+		if err != nil {
+			if err == io.EOF {
+				logMsg(LogLevelDebug, MSG("MSG_ID_DEBUG_CLOSED_CONN"))
+				break
+			}
+			msg := fmt.Sprintf(MSG("MSG_ID_ERR_RECV"), err.Error())
+			logMsg(LogLevelError, msg)
+			return sanitizeGRPCError(err)
+		}
+
+		switch payload := in.Payload.(type) {
+		case *pb.EncodeS2C_ChunkRequest:
+			// Server requests specific chunks
+			logMsg(LogLevelDebug, "Received chunk request with %d chunks", len(payload.ChunkRequest.Chunks))
+
+			for _, chunk := range payload.ChunkRequest.Chunks {
+				logMsg(LogLevelDebug, "Sending chunk at offset %d, length %d", chunk.Offset, chunk.Length)
+
+				buf, err := dataReader.ReadBytes(int64(chunk.Offset), chunk.Length)
+				if err != nil && err != io.EOF {
+					msg := fmt.Sprintf(MSG("MSG_ID_ERR_RETR_DATA"), err.Error())
+					logMsg(LogLevelError, msg)
+					return makeInternalError(msg)
+				}
+
+				dataMsg := &pb.EncodeC2S{
+					Payload: &pb.EncodeC2S_Data{
+						Data: &pb.DataChunkWithOffset{
+							Offset: chunk.Offset,
+							Data:   buf,
+						},
+					},
+				}
+
+				if err := stream.Send(dataMsg); err != nil {
+					err = sanitizeGRPCError(err)
+					msg := fmt.Sprintf(MSG("MSG_ID_ERR_SEND_DATA"), err.Error())
+					logMsg(LogLevelError, msg)
+					return err
+				}
+			}
+
+		case *pb.EncodeS2C_Data:
+			// Server sends encoded data chunks - write directly to io.WriterAt
+			offset := int64(payload.Data.Offset)
+			data := payload.Data.Data
+			logMsg(LogLevelDebug, "Received encoded data chunk at offset %d, size %d", offset, len(data))
+
+			n, err := writer.WriteAt(data, offset)
+			if err != nil {
+				logMsg(LogLevelError, "Failed to write encoded data at offset %d: %v", offset, err)
+				return makeInternalError(fmt.Sprintf("Failed to write encoded data: %v", err))
+			}
+			if n != len(data) {
+				logMsg(LogLevelError, "Incomplete write at offset %d: wrote %d bytes, expected %d", offset, n, len(data))
+				return makeInternalError(fmt.Sprintf("Incomplete write: wrote %d bytes, expected %d", n, len(data)))
+			}
+			totalBytesWritten += int64(n)
+
+		case *pb.EncodeS2C_End:
+			// Server signals completion
+			logMsg(LogLevelDebug, "Received end signal from server, total bytes written: %d", totalBytesWritten)
+			return nil
+
+		default:
+			msg := "Unknown message type received from server"
+			logMsg(LogLevelError, msg)
+			return makeInternalError(msg)
+		}
+	}
+
+	return nil
+}
+
+func (ac *AmaasClient) fileEncodeRun(ctx context.Context, src string, dst string) error {
+	if ac.conn == nil {
+		return makeInternalError(MSG("MSG_ID_ERR_CLIENT_NOT_READY"))
+	}
+
+	fileReader, err := InitFileReader(src)
+	if err != nil {
+		return makeInternalError(fmt.Sprintf(MSG("MSG_ID_ERR_CLIENT_ERROR"), err.Error()))
+	}
+	defer fileReader.Close()
+
+	// Create destination file
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		logMsg(LogLevelError, "Failed to create destination file: %v", err)
+		return makeInternalError(fmt.Sprintf("Failed to create destination file: %v", err))
+	}
+	defer dstFile.Close()
+
+	ctx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(ac.timeoutSecs))
+
+	ctx = ac.buildAuthContext(ctx)
+
+	ctx = ac.buildAppNameContext(ctx)
+
+	// Use the file as WriterAt for streaming writes
+	err = encodeRun(ctx, cancel, pb.NewScanClient(ac.conn), fileReader, dstFile)
+	if err != nil {
+		// Clean up the destination file on error
+		os.Remove(dst)
+		return err
+	}
+
+	logMsg(LogLevelDebug, "Successfully encoded file from %s to %s", src, dst)
+	return nil
+}
+
+func (ac *AmaasClient) readerEncodeRun(ctx context.Context, reader AmaasClientReader, writer io.WriterAt) error {
+	if ac.conn == nil {
+		return makeInternalError(MSG("MSG_ID_ERR_CLIENT_NOT_READY"))
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(ac.timeoutSecs))
+
+	ctx = ac.buildAuthContext(ctx)
+
+	ctx = ac.buildAppNameContext(ctx)
+
+	return encodeRun(ctx, cancel, pb.NewScanClient(ac.conn), reader, writer)
+}
+
+// decodeRun handles the bidirectional streaming decode operation
+func decodeRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, dataReader AmaasClientReader, writer io.Writer) error {
+
+	defer cancel()
+
+	var stream pb.Scan_DecodeClient
+	var err error
+
+	// Setup the stream
+	if stream, err = c.Decode(ctx); err != nil {
+		logMsg(LogLevelError, MSG("MSG_ID_ERR_SETUP_STREAM"), err)
+		return sanitizeGRPCError(err)
+	}
+
+	defer func(stream pb.Scan_DecodeClient) {
+		err := stream.CloseSend()
+		if err != nil {
+			panic(err)
+		}
+	}(stream)
+
+	// Get data size
+	size, err := dataReader.DataSize()
+	if err != nil {
+		return err
+	}
+
+	// Send init message
+	if err = decodeInitRequest(stream, uint64(size)); err != nil {
+		return err
+	}
+
+	// Handle decode upload/download loop
+	if err = decodeUploadLoop(stream, dataReader, writer); err != nil {
+		return err
+	}
+
+	logMsg(LogLevelDebug, "Decode completed successfully")
+
+	return nil
+}
+
+// decodeInitRequest sends the initial message with total input size
+func decodeInitRequest(stream pb.Scan_DecodeClient, dataSize uint64) error {
+	initMsg := &pb.DecodeC2S{
+		Payload: &pb.DecodeC2S_Init{
+			Init: &pb.TransformInit{
+				FileSize: dataSize,
+			},
+		},
+	}
+
+	if err := stream.Send(initMsg); err != nil {
+		logMsg(LogLevelError, MSG("MSG_ID_ERR_INIT"), err)
+		return sanitizeGRPCError(err)
+	}
+
+	return nil
+}
+
+// decodeUploadLoop handles the bidirectional communication for decode operation
+func decodeUploadLoop(stream pb.Scan_DecodeClient, dataReader AmaasClientReader, writer io.Writer) error {
+	var totalBytesWritten int64
+
+	for {
+		in, err := stream.Recv()
+
+		if err != nil {
+			if err == io.EOF {
+				logMsg(LogLevelDebug, MSG("MSG_ID_DEBUG_CLOSED_CONN"))
+				break
+			}
+			msg := fmt.Sprintf(MSG("MSG_ID_ERR_RECV"), err.Error())
+			logMsg(LogLevelError, msg)
+			return sanitizeGRPCError(err)
+		}
+
+		switch payload := in.Payload.(type) {
+		case *pb.DecodeS2C_ChunkRequest:
+			// Server requests specific chunks
+			logMsg(LogLevelDebug, "Received chunk request with %d chunks", len(payload.ChunkRequest.Chunks))
+
+			for _, chunk := range payload.ChunkRequest.Chunks {
+				logMsg(LogLevelDebug, "Sending chunk at offset %d, length %d", chunk.Offset, chunk.Length)
+
+				buf, err := dataReader.ReadBytes(int64(chunk.Offset), chunk.Length)
+				if err != nil && err != io.EOF {
+					msg := fmt.Sprintf(MSG("MSG_ID_ERR_RETR_DATA"), err.Error())
+					logMsg(LogLevelError, msg)
+					return makeInternalError(msg)
+				}
+
+				dataMsg := &pb.DecodeC2S{
+					Payload: &pb.DecodeC2S_Data{
+						Data: &pb.DataChunkWithOffset{
+							Offset: chunk.Offset,
+							Data:   buf,
+						},
+					},
+				}
+
+				if err := stream.Send(dataMsg); err != nil {
+					err = sanitizeGRPCError(err)
+					msg := fmt.Sprintf(MSG("MSG_ID_ERR_SEND_DATA"), err.Error())
+					logMsg(LogLevelError, msg)
+					return err
+				}
+			}
+
+		case *pb.DecodeS2C_Data:
+			// Server sends decoded data chunks sequentially (no offset) - write to io.Writer
+			data := payload.Data.Data
+			logMsg(LogLevelDebug, "Received decoded data chunk, size %d", len(data))
+
+			n, err := writer.Write(data)
+			if err != nil {
+				logMsg(LogLevelError, "Failed to write decoded data: %v", err)
+				return makeInternalError(fmt.Sprintf("Failed to write decoded data: %v", err))
+			}
+			if n != len(data) {
+				logMsg(LogLevelError, "Incomplete write: wrote %d bytes, expected %d", n, len(data))
+				return makeInternalError(fmt.Sprintf("Incomplete write: wrote %d bytes, expected %d", n, len(data)))
+			}
+			totalBytesWritten += int64(n)
+
+		case *pb.DecodeS2C_End:
+			// Server signals completion
+			logMsg(LogLevelDebug, "Received end signal from server, total bytes written: %d", totalBytesWritten)
+			return nil
+
+		default:
+			msg := "Unknown message type received from server"
+			logMsg(LogLevelError, msg)
+			return makeInternalError(msg)
+		}
+	}
+
+	return nil
+}
+
+func (ac *AmaasClient) fileDecodeRun(ctx context.Context, src string, dst string) error {
+	if ac.conn == nil {
+		return makeInternalError(MSG("MSG_ID_ERR_CLIENT_NOT_READY"))
+	}
+
+	fileReader, err := InitFileReader(src)
+	if err != nil {
+		return makeInternalError(fmt.Sprintf(MSG("MSG_ID_ERR_CLIENT_ERROR"), err.Error()))
+	}
+	defer fileReader.Close()
+
+	// Create destination file
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		logMsg(LogLevelError, "Failed to create destination file: %v", err)
+		return makeInternalError(fmt.Sprintf("Failed to create destination file: %v", err))
+	}
+	defer dstFile.Close()
+
+	ctx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(ac.timeoutSecs))
+
+	ctx = ac.buildAuthContext(ctx)
+
+	ctx = ac.buildAppNameContext(ctx)
+
+	// Use the file as Writer for sequential writes
+	err = decodeRun(ctx, cancel, pb.NewScanClient(ac.conn), fileReader, dstFile)
+	if err != nil {
+		// Clean up the destination file on error
+		os.Remove(dst)
+		return err
+	}
+
+	logMsg(LogLevelDebug, "Successfully decoded file from %s to %s", src, dst)
+	return nil
+}
+
+func (ac *AmaasClient) readerDecodeRun(ctx context.Context, reader AmaasClientReader, writer io.Writer) error {
+	if ac.conn == nil {
+		return makeInternalError(MSG("MSG_ID_ERR_CLIENT_NOT_READY"))
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(ac.timeoutSecs))
+
+	ctx = ac.buildAuthContext(ctx)
+
+	ctx = ac.buildAppNameContext(ctx)
+
+	return decodeRun(ctx, cancel, pb.NewScanClient(ac.conn), reader, writer)
 }
 
 // Function to load TLS credentials with optional certificate verification

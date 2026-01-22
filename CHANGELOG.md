@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 1.7.0 - 2026-01-19
+
+* Add `EncodeFile`, `EncodeReader`, `DecodeFile`, `DecodeReader` functions for quarantining malicious files
+* Support new regions: eu-west-2 (UK), ca-central-1 (Canada)
+
 ## 1.6.1 - 2025-09-11
 
 * Add customized cloud account id setting via `SetCloudAccountID` function

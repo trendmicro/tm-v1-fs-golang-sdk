@@ -21,7 +21,9 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Scan_Run_FullMethodName = "/amaas.scan.v1.Scan/Run"
+	Scan_Run_FullMethodName    = "/amaas.scan.v1.Scan/Run"
+	Scan_Encode_FullMethodName = "/amaas.scan.v1.Scan/Encode"
+	Scan_Decode_FullMethodName = "/amaas.scan.v1.Scan/Decode"
 )
 
 // ScanClient is the client API for Scan service.
@@ -31,6 +33,8 @@ const (
 // Interface exported by the server.
 type ScanClient interface {
 	Run(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[C2S, S2C], error)
+	Encode(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[EncodeC2S, EncodeS2C], error)
+	Decode(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[DecodeC2S, DecodeS2C], error)
 }
 
 type scanClient struct {
@@ -54,6 +58,32 @@ func (c *scanClient) Run(ctx context.Context, opts ...grpc.CallOption) (grpc.Bid
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Scan_RunClient = grpc.BidiStreamingClient[C2S, S2C]
 
+func (c *scanClient) Encode(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[EncodeC2S, EncodeS2C], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Scan_ServiceDesc.Streams[1], Scan_Encode_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[EncodeC2S, EncodeS2C]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Scan_EncodeClient = grpc.BidiStreamingClient[EncodeC2S, EncodeS2C]
+
+func (c *scanClient) Decode(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[DecodeC2S, DecodeS2C], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Scan_ServiceDesc.Streams[2], Scan_Decode_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[DecodeC2S, DecodeS2C]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Scan_DecodeClient = grpc.BidiStreamingClient[DecodeC2S, DecodeS2C]
+
 // ScanServer is the server API for Scan service.
 // All implementations must embed UnimplementedScanServer
 // for forward compatibility.
@@ -61,6 +91,8 @@ type Scan_RunClient = grpc.BidiStreamingClient[C2S, S2C]
 // Interface exported by the server.
 type ScanServer interface {
 	Run(grpc.BidiStreamingServer[C2S, S2C]) error
+	Encode(grpc.BidiStreamingServer[EncodeC2S, EncodeS2C]) error
+	Decode(grpc.BidiStreamingServer[DecodeC2S, DecodeS2C]) error
 	mustEmbedUnimplementedScanServer()
 }
 
@@ -73,6 +105,12 @@ type UnimplementedScanServer struct{}
 
 func (UnimplementedScanServer) Run(grpc.BidiStreamingServer[C2S, S2C]) error {
 	return status.Errorf(codes.Unimplemented, "method Run not implemented")
+}
+func (UnimplementedScanServer) Encode(grpc.BidiStreamingServer[EncodeC2S, EncodeS2C]) error {
+	return status.Errorf(codes.Unimplemented, "method Encode not implemented")
+}
+func (UnimplementedScanServer) Decode(grpc.BidiStreamingServer[DecodeC2S, DecodeS2C]) error {
+	return status.Errorf(codes.Unimplemented, "method Decode not implemented")
 }
 func (UnimplementedScanServer) mustEmbedUnimplementedScanServer() {}
 func (UnimplementedScanServer) testEmbeddedByValue()              {}
@@ -102,6 +140,20 @@ func _Scan_Run_Handler(srv interface{}, stream grpc.ServerStream) error {
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Scan_RunServer = grpc.BidiStreamingServer[C2S, S2C]
 
+func _Scan_Encode_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ScanServer).Encode(&grpc.GenericServerStream[EncodeC2S, EncodeS2C]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Scan_EncodeServer = grpc.BidiStreamingServer[EncodeC2S, EncodeS2C]
+
+func _Scan_Decode_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ScanServer).Decode(&grpc.GenericServerStream[DecodeC2S, DecodeS2C]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Scan_DecodeServer = grpc.BidiStreamingServer[DecodeC2S, DecodeS2C]
+
 // Scan_ServiceDesc is the grpc.ServiceDesc for Scan service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -113,6 +165,18 @@ var Scan_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "Run",
 			Handler:       _Scan_Run_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "Encode",
+			Handler:       _Scan_Encode_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "Decode",
+			Handler:       _Scan_Decode_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},

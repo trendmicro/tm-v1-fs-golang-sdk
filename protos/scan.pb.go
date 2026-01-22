@@ -358,6 +358,641 @@ func (x *S2C) GetSessionId() string {
 	return ""
 }
 
+// Common messages for Encode and Decode operations
+type TransformInit struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	FileSize      uint64                 `protobuf:"varint,1,opt,name=file_size,json=fileSize,proto3" json:"file_size,omitempty"` // Size of input file
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TransformInit) Reset() {
+	*x = TransformInit{}
+	mi := &file_scan_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TransformInit) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TransformInit) ProtoMessage() {}
+
+func (x *TransformInit) ProtoReflect() protoreflect.Message {
+	mi := &file_scan_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TransformInit.ProtoReflect.Descriptor instead.
+func (*TransformInit) Descriptor() ([]byte, []int) {
+	return file_scan_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *TransformInit) GetFileSize() uint64 {
+	if x != nil {
+		return x.FileSize
+	}
+	return 0
+}
+
+type ChunkRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Offset        int32                  `protobuf:"varint,1,opt,name=offset,proto3" json:"offset,omitempty"`
+	Length        int32                  `protobuf:"varint,2,opt,name=length,proto3" json:"length,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChunkRequest) Reset() {
+	*x = ChunkRequest{}
+	mi := &file_scan_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChunkRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChunkRequest) ProtoMessage() {}
+
+func (x *ChunkRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_scan_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChunkRequest.ProtoReflect.Descriptor instead.
+func (*ChunkRequest) Descriptor() ([]byte, []int) {
+	return file_scan_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ChunkRequest) GetOffset() int32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *ChunkRequest) GetLength() int32 {
+	if x != nil {
+		return x.Length
+	}
+	return 0
+}
+
+type ChunkRequestList struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Chunks        []*ChunkRequest        `protobuf:"bytes,1,rep,name=chunks,proto3" json:"chunks,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChunkRequestList) Reset() {
+	*x = ChunkRequestList{}
+	mi := &file_scan_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChunkRequestList) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChunkRequestList) ProtoMessage() {}
+
+func (x *ChunkRequestList) ProtoReflect() protoreflect.Message {
+	mi := &file_scan_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChunkRequestList.ProtoReflect.Descriptor instead.
+func (*ChunkRequestList) Descriptor() ([]byte, []int) {
+	return file_scan_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ChunkRequestList) GetChunks() []*ChunkRequest {
+	if x != nil {
+		return x.Chunks
+	}
+	return nil
+}
+
+type DataChunkWithOffset struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Offset        int32                  `protobuf:"varint,1,opt,name=offset,proto3" json:"offset,omitempty"`
+	Data          []byte                 `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DataChunkWithOffset) Reset() {
+	*x = DataChunkWithOffset{}
+	mi := &file_scan_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DataChunkWithOffset) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DataChunkWithOffset) ProtoMessage() {}
+
+func (x *DataChunkWithOffset) ProtoReflect() protoreflect.Message {
+	mi := &file_scan_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DataChunkWithOffset.ProtoReflect.Descriptor instead.
+func (*DataChunkWithOffset) Descriptor() ([]byte, []int) {
+	return file_scan_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *DataChunkWithOffset) GetOffset() int32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *DataChunkWithOffset) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+type DataChunk struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DataChunk) Reset() {
+	*x = DataChunk{}
+	mi := &file_scan_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DataChunk) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DataChunk) ProtoMessage() {}
+
+func (x *DataChunk) ProtoReflect() protoreflect.Message {
+	mi := &file_scan_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DataChunk.ProtoReflect.Descriptor instead.
+func (*DataChunk) Descriptor() ([]byte, []int) {
+	return file_scan_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *DataChunk) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+type TransformEnd struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TransformEnd) Reset() {
+	*x = TransformEnd{}
+	mi := &file_scan_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TransformEnd) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TransformEnd) ProtoMessage() {}
+
+func (x *TransformEnd) ProtoReflect() protoreflect.Message {
+	mi := &file_scan_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TransformEnd.ProtoReflect.Descriptor instead.
+func (*TransformEnd) Descriptor() ([]byte, []int) {
+	return file_scan_proto_rawDescGZIP(), []int{7}
+}
+
+// Encode messages
+type EncodeC2S struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Payload:
+	//
+	//	*EncodeC2S_Init
+	//	*EncodeC2S_Data
+	Payload       isEncodeC2S_Payload `protobuf_oneof:"payload"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EncodeC2S) Reset() {
+	*x = EncodeC2S{}
+	mi := &file_scan_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EncodeC2S) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EncodeC2S) ProtoMessage() {}
+
+func (x *EncodeC2S) ProtoReflect() protoreflect.Message {
+	mi := &file_scan_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EncodeC2S.ProtoReflect.Descriptor instead.
+func (*EncodeC2S) Descriptor() ([]byte, []int) {
+	return file_scan_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *EncodeC2S) GetPayload() isEncodeC2S_Payload {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *EncodeC2S) GetInit() *TransformInit {
+	if x != nil {
+		if x, ok := x.Payload.(*EncodeC2S_Init); ok {
+			return x.Init
+		}
+	}
+	return nil
+}
+
+func (x *EncodeC2S) GetData() *DataChunkWithOffset {
+	if x != nil {
+		if x, ok := x.Payload.(*EncodeC2S_Data); ok {
+			return x.Data
+		}
+	}
+	return nil
+}
+
+type isEncodeC2S_Payload interface {
+	isEncodeC2S_Payload()
+}
+
+type EncodeC2S_Init struct {
+	Init *TransformInit `protobuf:"bytes,1,opt,name=init,proto3,oneof"`
+}
+
+type EncodeC2S_Data struct {
+	Data *DataChunkWithOffset `protobuf:"bytes,2,opt,name=data,proto3,oneof"` // Client responds to chunk requests with offset
+}
+
+func (*EncodeC2S_Init) isEncodeC2S_Payload() {}
+
+func (*EncodeC2S_Data) isEncodeC2S_Payload() {}
+
+type EncodeS2C struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Payload:
+	//
+	//	*EncodeS2C_ChunkRequest
+	//	*EncodeS2C_Data
+	//	*EncodeS2C_End
+	Payload       isEncodeS2C_Payload `protobuf_oneof:"payload"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EncodeS2C) Reset() {
+	*x = EncodeS2C{}
+	mi := &file_scan_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EncodeS2C) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EncodeS2C) ProtoMessage() {}
+
+func (x *EncodeS2C) ProtoReflect() protoreflect.Message {
+	mi := &file_scan_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EncodeS2C.ProtoReflect.Descriptor instead.
+func (*EncodeS2C) Descriptor() ([]byte, []int) {
+	return file_scan_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *EncodeS2C) GetPayload() isEncodeS2C_Payload {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *EncodeS2C) GetChunkRequest() *ChunkRequestList {
+	if x != nil {
+		if x, ok := x.Payload.(*EncodeS2C_ChunkRequest); ok {
+			return x.ChunkRequest
+		}
+	}
+	return nil
+}
+
+func (x *EncodeS2C) GetData() *DataChunkWithOffset {
+	if x != nil {
+		if x, ok := x.Payload.(*EncodeS2C_Data); ok {
+			return x.Data
+		}
+	}
+	return nil
+}
+
+func (x *EncodeS2C) GetEnd() *TransformEnd {
+	if x != nil {
+		if x, ok := x.Payload.(*EncodeS2C_End); ok {
+			return x.End
+		}
+	}
+	return nil
+}
+
+type isEncodeS2C_Payload interface {
+	isEncodeS2C_Payload()
+}
+
+type EncodeS2C_ChunkRequest struct {
+	ChunkRequest *ChunkRequestList `protobuf:"bytes,1,opt,name=chunk_request,json=chunkRequest,proto3,oneof"` // Server requests specific chunks
+}
+
+type EncodeS2C_Data struct {
+	Data *DataChunkWithOffset `protobuf:"bytes,2,opt,name=data,proto3,oneof"` // Server sends encoded data with offset
+}
+
+type EncodeS2C_End struct {
+	End *TransformEnd `protobuf:"bytes,3,opt,name=end,proto3,oneof"`
+}
+
+func (*EncodeS2C_ChunkRequest) isEncodeS2C_Payload() {}
+
+func (*EncodeS2C_Data) isEncodeS2C_Payload() {}
+
+func (*EncodeS2C_End) isEncodeS2C_Payload() {}
+
+// Decode messages
+type DecodeC2S struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Payload:
+	//
+	//	*DecodeC2S_Init
+	//	*DecodeC2S_Data
+	Payload       isDecodeC2S_Payload `protobuf_oneof:"payload"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DecodeC2S) Reset() {
+	*x = DecodeC2S{}
+	mi := &file_scan_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DecodeC2S) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DecodeC2S) ProtoMessage() {}
+
+func (x *DecodeC2S) ProtoReflect() protoreflect.Message {
+	mi := &file_scan_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DecodeC2S.ProtoReflect.Descriptor instead.
+func (*DecodeC2S) Descriptor() ([]byte, []int) {
+	return file_scan_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *DecodeC2S) GetPayload() isDecodeC2S_Payload {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *DecodeC2S) GetInit() *TransformInit {
+	if x != nil {
+		if x, ok := x.Payload.(*DecodeC2S_Init); ok {
+			return x.Init
+		}
+	}
+	return nil
+}
+
+func (x *DecodeC2S) GetData() *DataChunkWithOffset {
+	if x != nil {
+		if x, ok := x.Payload.(*DecodeC2S_Data); ok {
+			return x.Data
+		}
+	}
+	return nil
+}
+
+type isDecodeC2S_Payload interface {
+	isDecodeC2S_Payload()
+}
+
+type DecodeC2S_Init struct {
+	Init *TransformInit `protobuf:"bytes,1,opt,name=init,proto3,oneof"`
+}
+
+type DecodeC2S_Data struct {
+	Data *DataChunkWithOffset `protobuf:"bytes,2,opt,name=data,proto3,oneof"` // Client responds to chunk requests with offset
+}
+
+func (*DecodeC2S_Init) isDecodeC2S_Payload() {}
+
+func (*DecodeC2S_Data) isDecodeC2S_Payload() {}
+
+type DecodeS2C struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Payload:
+	//
+	//	*DecodeS2C_ChunkRequest
+	//	*DecodeS2C_Data
+	//	*DecodeS2C_End
+	Payload       isDecodeS2C_Payload `protobuf_oneof:"payload"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DecodeS2C) Reset() {
+	*x = DecodeS2C{}
+	mi := &file_scan_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DecodeS2C) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DecodeS2C) ProtoMessage() {}
+
+func (x *DecodeS2C) ProtoReflect() protoreflect.Message {
+	mi := &file_scan_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DecodeS2C.ProtoReflect.Descriptor instead.
+func (*DecodeS2C) Descriptor() ([]byte, []int) {
+	return file_scan_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *DecodeS2C) GetPayload() isDecodeS2C_Payload {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *DecodeS2C) GetChunkRequest() *ChunkRequestList {
+	if x != nil {
+		if x, ok := x.Payload.(*DecodeS2C_ChunkRequest); ok {
+			return x.ChunkRequest
+		}
+	}
+	return nil
+}
+
+func (x *DecodeS2C) GetData() *DataChunk {
+	if x != nil {
+		if x, ok := x.Payload.(*DecodeS2C_Data); ok {
+			return x.Data
+		}
+	}
+	return nil
+}
+
+func (x *DecodeS2C) GetEnd() *TransformEnd {
+	if x != nil {
+		if x, ok := x.Payload.(*DecodeS2C_End); ok {
+			return x.End
+		}
+	}
+	return nil
+}
+
+type isDecodeS2C_Payload interface {
+	isDecodeS2C_Payload()
+}
+
+type DecodeS2C_ChunkRequest struct {
+	ChunkRequest *ChunkRequestList `protobuf:"bytes,1,opt,name=chunk_request,json=chunkRequest,proto3,oneof"` // Server requests specific chunks
+}
+
+type DecodeS2C_Data struct {
+	Data *DataChunk `protobuf:"bytes,2,opt,name=data,proto3,oneof"` // Server sends decoded data sequentially (no offset)
+}
+
+type DecodeS2C_End struct {
+	End *TransformEnd `protobuf:"bytes,3,opt,name=end,proto3,oneof"`
+}
+
+func (*DecodeS2C_ChunkRequest) isDecodeS2C_Payload() {}
+
+func (*DecodeS2C_Data) isDecodeS2C_Payload() {}
+
+func (*DecodeS2C_End) isDecodeS2C_Payload() {}
+
 var File_scan_proto protoreflect.FileDescriptor
 
 const file_scan_proto_rawDesc = "" +
@@ -391,7 +1026,38 @@ const file_scan_proto_rawDesc = "" +
 	"\vbulk_length\x18\a \x03(\x05R\n" +
 	"bulkLength\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\b \x01(\tR\tsessionId*6\n" +
+	"session_id\x18\b \x01(\tR\tsessionId\",\n" +
+	"\rTransformInit\x12\x1b\n" +
+	"\tfile_size\x18\x01 \x01(\x04R\bfileSize\">\n" +
+	"\fChunkRequest\x12\x16\n" +
+	"\x06offset\x18\x01 \x01(\x05R\x06offset\x12\x16\n" +
+	"\x06length\x18\x02 \x01(\x05R\x06length\"G\n" +
+	"\x10ChunkRequestList\x123\n" +
+	"\x06chunks\x18\x01 \x03(\v2\x1b.amaas.scan.v1.ChunkRequestR\x06chunks\"A\n" +
+	"\x13DataChunkWithOffset\x12\x16\n" +
+	"\x06offset\x18\x01 \x01(\x05R\x06offset\x12\x12\n" +
+	"\x04data\x18\x02 \x01(\fR\x04data\"\x1f\n" +
+	"\tDataChunk\x12\x12\n" +
+	"\x04data\x18\x01 \x01(\fR\x04data\"\x0e\n" +
+	"\fTransformEnd\"\x84\x01\n" +
+	"\tEncodeC2S\x122\n" +
+	"\x04init\x18\x01 \x01(\v2\x1c.amaas.scan.v1.TransformInitH\x00R\x04init\x128\n" +
+	"\x04data\x18\x02 \x01(\v2\".amaas.scan.v1.DataChunkWithOffsetH\x00R\x04dataB\t\n" +
+	"\apayload\"\xc9\x01\n" +
+	"\tEncodeS2C\x12F\n" +
+	"\rchunk_request\x18\x01 \x01(\v2\x1f.amaas.scan.v1.ChunkRequestListH\x00R\fchunkRequest\x128\n" +
+	"\x04data\x18\x02 \x01(\v2\".amaas.scan.v1.DataChunkWithOffsetH\x00R\x04data\x12/\n" +
+	"\x03end\x18\x03 \x01(\v2\x1b.amaas.scan.v1.TransformEndH\x00R\x03endB\t\n" +
+	"\apayload\"\x84\x01\n" +
+	"\tDecodeC2S\x122\n" +
+	"\x04init\x18\x01 \x01(\v2\x1c.amaas.scan.v1.TransformInitH\x00R\x04init\x128\n" +
+	"\x04data\x18\x02 \x01(\v2\".amaas.scan.v1.DataChunkWithOffsetH\x00R\x04dataB\t\n" +
+	"\apayload\"\xbf\x01\n" +
+	"\tDecodeS2C\x12F\n" +
+	"\rchunk_request\x18\x01 \x01(\v2\x1f.amaas.scan.v1.ChunkRequestListH\x00R\fchunkRequest\x12.\n" +
+	"\x04data\x18\x02 \x01(\v2\x18.amaas.scan.v1.DataChunkH\x00R\x04data\x12/\n" +
+	"\x03end\x18\x03 \x01(\v2\x1b.amaas.scan.v1.TransformEndH\x00R\x03endB\t\n" +
+	"\apayload*6\n" +
 	"\x05Stage\x12\x0e\n" +
 	"\n" +
 	"STAGE_INIT\x10\x00\x12\r\n" +
@@ -400,9 +1066,11 @@ const file_scan_proto_rawDesc = "" +
 	"STAGE_FINI\x10\x02*%\n" +
 	"\aCommand\x12\f\n" +
 	"\bCMD_RETR\x10\x00\x12\f\n" +
-	"\bCMD_QUIT\x10\x012;\n" +
+	"\bCMD_QUIT\x10\x012\xc3\x01\n" +
 	"\x04Scan\x123\n" +
-	"\x03Run\x12\x12.amaas.scan.v1.C2S\x1a\x12.amaas.scan.v1.S2C\"\x00(\x010\x01B3\n" +
+	"\x03Run\x12\x12.amaas.scan.v1.C2S\x1a\x12.amaas.scan.v1.S2C\"\x00(\x010\x01\x12B\n" +
+	"\x06Encode\x12\x18.amaas.scan.v1.EncodeC2S\x1a\x18.amaas.scan.v1.EncodeS2C\"\x00(\x010\x01\x12B\n" +
+	"\x06Decode\x12\x18.amaas.scan.v1.DecodeC2S\x1a\x18.amaas.scan.v1.DecodeS2C\"\x00(\x010\x01B3\n" +
 	"\x1dcom.trend.cloudone.amaas.scanZ\x12amaas/scanner/baseb\x06proto3"
 
 var (
@@ -418,24 +1086,49 @@ func file_scan_proto_rawDescGZIP() []byte {
 }
 
 var file_scan_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_scan_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_scan_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_scan_proto_goTypes = []any{
-	(Stage)(0),   // 0: amaas.scan.v1.Stage
-	(Command)(0), // 1: amaas.scan.v1.Command
-	(*C2S)(nil),  // 2: amaas.scan.v1.C2S
-	(*S2C)(nil),  // 3: amaas.scan.v1.S2C
+	(Stage)(0),                  // 0: amaas.scan.v1.Stage
+	(Command)(0),                // 1: amaas.scan.v1.Command
+	(*C2S)(nil),                 // 2: amaas.scan.v1.C2S
+	(*S2C)(nil),                 // 3: amaas.scan.v1.S2C
+	(*TransformInit)(nil),       // 4: amaas.scan.v1.TransformInit
+	(*ChunkRequest)(nil),        // 5: amaas.scan.v1.ChunkRequest
+	(*ChunkRequestList)(nil),    // 6: amaas.scan.v1.ChunkRequestList
+	(*DataChunkWithOffset)(nil), // 7: amaas.scan.v1.DataChunkWithOffset
+	(*DataChunk)(nil),           // 8: amaas.scan.v1.DataChunk
+	(*TransformEnd)(nil),        // 9: amaas.scan.v1.TransformEnd
+	(*EncodeC2S)(nil),           // 10: amaas.scan.v1.EncodeC2S
+	(*EncodeS2C)(nil),           // 11: amaas.scan.v1.EncodeS2C
+	(*DecodeC2S)(nil),           // 12: amaas.scan.v1.DecodeC2S
+	(*DecodeS2C)(nil),           // 13: amaas.scan.v1.DecodeS2C
 }
 var file_scan_proto_depIdxs = []int32{
-	0, // 0: amaas.scan.v1.C2S.stage:type_name -> amaas.scan.v1.Stage
-	0, // 1: amaas.scan.v1.S2C.stage:type_name -> amaas.scan.v1.Stage
-	1, // 2: amaas.scan.v1.S2C.cmd:type_name -> amaas.scan.v1.Command
-	2, // 3: amaas.scan.v1.Scan.Run:input_type -> amaas.scan.v1.C2S
-	3, // 4: amaas.scan.v1.Scan.Run:output_type -> amaas.scan.v1.S2C
-	4, // [4:5] is the sub-list for method output_type
-	3, // [3:4] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	0,  // 0: amaas.scan.v1.C2S.stage:type_name -> amaas.scan.v1.Stage
+	0,  // 1: amaas.scan.v1.S2C.stage:type_name -> amaas.scan.v1.Stage
+	1,  // 2: amaas.scan.v1.S2C.cmd:type_name -> amaas.scan.v1.Command
+	5,  // 3: amaas.scan.v1.ChunkRequestList.chunks:type_name -> amaas.scan.v1.ChunkRequest
+	4,  // 4: amaas.scan.v1.EncodeC2S.init:type_name -> amaas.scan.v1.TransformInit
+	7,  // 5: amaas.scan.v1.EncodeC2S.data:type_name -> amaas.scan.v1.DataChunkWithOffset
+	6,  // 6: amaas.scan.v1.EncodeS2C.chunk_request:type_name -> amaas.scan.v1.ChunkRequestList
+	7,  // 7: amaas.scan.v1.EncodeS2C.data:type_name -> amaas.scan.v1.DataChunkWithOffset
+	9,  // 8: amaas.scan.v1.EncodeS2C.end:type_name -> amaas.scan.v1.TransformEnd
+	4,  // 9: amaas.scan.v1.DecodeC2S.init:type_name -> amaas.scan.v1.TransformInit
+	7,  // 10: amaas.scan.v1.DecodeC2S.data:type_name -> amaas.scan.v1.DataChunkWithOffset
+	6,  // 11: amaas.scan.v1.DecodeS2C.chunk_request:type_name -> amaas.scan.v1.ChunkRequestList
+	8,  // 12: amaas.scan.v1.DecodeS2C.data:type_name -> amaas.scan.v1.DataChunk
+	9,  // 13: amaas.scan.v1.DecodeS2C.end:type_name -> amaas.scan.v1.TransformEnd
+	2,  // 14: amaas.scan.v1.Scan.Run:input_type -> amaas.scan.v1.C2S
+	10, // 15: amaas.scan.v1.Scan.Encode:input_type -> amaas.scan.v1.EncodeC2S
+	12, // 16: amaas.scan.v1.Scan.Decode:input_type -> amaas.scan.v1.DecodeC2S
+	3,  // 17: amaas.scan.v1.Scan.Run:output_type -> amaas.scan.v1.S2C
+	11, // 18: amaas.scan.v1.Scan.Encode:output_type -> amaas.scan.v1.EncodeS2C
+	13, // 19: amaas.scan.v1.Scan.Decode:output_type -> amaas.scan.v1.DecodeS2C
+	17, // [17:20] is the sub-list for method output_type
+	14, // [14:17] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_scan_proto_init() }
@@ -443,13 +1136,31 @@ func file_scan_proto_init() {
 	if File_scan_proto != nil {
 		return
 	}
+	file_scan_proto_msgTypes[8].OneofWrappers = []any{
+		(*EncodeC2S_Init)(nil),
+		(*EncodeC2S_Data)(nil),
+	}
+	file_scan_proto_msgTypes[9].OneofWrappers = []any{
+		(*EncodeS2C_ChunkRequest)(nil),
+		(*EncodeS2C_Data)(nil),
+		(*EncodeS2C_End)(nil),
+	}
+	file_scan_proto_msgTypes[10].OneofWrappers = []any{
+		(*DecodeC2S_Init)(nil),
+		(*DecodeC2S_Data)(nil),
+	}
+	file_scan_proto_msgTypes[11].OneofWrappers = []any{
+		(*DecodeS2C_ChunkRequest)(nil),
+		(*DecodeS2C_Data)(nil),
+		(*DecodeS2C_End)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_scan_proto_rawDesc), len(file_scan_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   2,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -41,6 +41,7 @@ var messageMap = map[string]string{
 	"MSG_ID_DEBUG_BULK_TRANSFER":       "Bulk transfer triggered",
 	"MSG_ID_ERR_UNSUPPORTED_ALGORITHM": "Unsupported algorithm for calculating the hash: %s",
 	"MSG_ID_ERR_TIMEOUT":               "Context deadline exceeded",
+	"MSG_ID_DEBUG_SHA256_FROM_CTX":     "SHA256 hash retrieved from context: %s",
 }
 
 func MSG(id string) string {

@@ -225,9 +225,129 @@ if err != nil {
 }
 ```
 
-**Note**: 
+**Note**:
 - The total tag length (including `cloudAccountId=` prefix) cannot exceed 63 characters
 - Using cloud account ID occupies one tag slot, reducing max customer tags from 8 to 7
+
+### Quarantine Malicious Files with Encode/Decode
+
+The SDK provides Encode and Decode methods for quarantining malicious files detected during scanning. The recommended workflow is: **scan a file first, and if malware is detected, encode the file to neutralize it and then delete the original file** to prevent infection.
+
+**Recommended Workflow:**
+1. **Scan the file** using `ScanFile()` or `ScanBuffer()`
+2. **Check scan result** - if `scanResult` is non-zero, malware was detected
+3. **Encode the malicious file** to transform it into a safe, non-executable format
+4. **Delete the original file** to eliminate the threat from your system
+5. **Store the encoded file** in a quarantine location for later analysis if needed
+
+**Use Cases:**
+- **Malware Quarantine**: Neutralize detected threats by encoding them into a safe format
+- **Threat Isolation**: Prevent malicious files from executing while preserving them for analysis
+- **Security Research**: Safely archive malware samples for later investigation in isolated environments
+
+#### Quarantining a Detected Malicious File
+
+The following example demonstrates the complete workflow: scan, detect, encode, and delete:
+
+```go
+import (
+    "context"
+    "encoding/json"
+    "os"
+)
+
+filePath := "/path/to/suspicious/file.exe"
+quarantinePath := "/path/to/quarantine/file.exe.enc"
+tags := []string{"scan-source:upload"}
+
+// Step 1: Scan the file
+response, err := client.ScanFile(filePath, tags)
+if err != nil {
+    // Handle scanning error
+    panic(err)
+}
+
+// Step 2: Parse the scan result
+var scanResult struct {
+    ScanResult int `json:"scanResult"`
+}
+if err := json.Unmarshal([]byte(response), &scanResult); err != nil {
+    panic(err)
+}
+
+// Step 3: If malware detected (scanResult != 0), encode and delete original
+if scanResult.ScanResult != 0 {
+    ctx := context.Background()
+
+    // Encode the malicious file to quarantine location
+    err := client.EncodeFile(ctx, filePath, quarantinePath)
+    if err != nil {
+        // Handle encoding error
+        panic(err)
+    }
+
+    // Delete the original malicious file to prevent infection
+    err = os.Remove(filePath)
+    if err != nil {
+        // Handle deletion error
+        panic(err)
+    }
+
+    // File is now safely quarantined
+}
+```
+
+#### Decoding a Quarantined File for Analysis
+
+Restore a quarantined file back to its original form **only in a secure, isolated environment** (e.g., sandbox, VM) for malware analysis:
+
+```go
+ctx := context.Background()
+
+// Decode the quarantined file for analysis in a secure environment
+err := client.DecodeFile(ctx, "/path/to/quarantine/file.exe.enc", "/secure/sandbox/file.exe")
+if err != nil {
+    // Handle decoding error
+    panic(err)
+}
+
+// WARNING: The decoded file is now a live malware sample
+// Only perform this operation in an isolated analysis environment
+```
+
+#### Using Encode/Decode with Custom Readers
+
+For advanced use cases (e.g., quarantining files from cloud storage), you can use the reader-based methods with custom implementations of `AmaasClientReader`:
+
+```go
+import (
+    "context"
+    "io"
+)
+
+ctx := context.Background()
+
+// Encode using a custom reader (writer must implement io.WriterAt)
+err := client.EncodeReader(ctx, customReader, customWriterAt)
+if err != nil {
+    // Handle encoding error
+    panic(err)
+}
+
+// Decode using a custom reader (writer must implement io.Writer)
+err = client.DecodeReader(ctx, customReader, customWriter)
+if err != nil {
+    // Handle decoding error
+    panic(err)
+}
+```
+
+**_Important Security Notes_**
+
+- **Always scan before encoding** - Encode is designed for quarantining detected malware, not for general file encoding
+- **Delete original files after encoding** - The original malicious file must be removed to prevent infection
+- **Decode only in isolated environments** - Restored files are live malware; only decode in sandboxes or VMs designed for malware analysis
+- **Implement access controls** - Restrict access to quarantine locations to prevent unauthorized decoding
 
 ## Golang Client SDK API Reference
 
@@ -240,7 +360,7 @@ Creates a new instance of the client object, and provisions essential settings, 
 | Parameter       | Description                                                                                                                                                                                  |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | key (string)    | A valid API key must be provided if the environment variable `TM_AM_AUTH_KEY` is not set.                                                                                                    |
-| region (string) | The region you obtained your api key.  Value provided must be one of the Vision One regions: `us-east-1`, `eu-central-1`, `ap-southeast-1`, `ap-southeast-2`, `ap-northeast-1`, `ap-south-1`, `me-central-1` |
+| region (string) | The region you obtained your api key.  Value provided must be one of the Vision One regions: `us-east-1`, `eu-central-1`, `eu-west-2`, `ca-central-1`, `ap-southeast-1`, `ap-southeast-2`, `ap-northeast-1`, `ap-south-1`, `me-central-1` |
 
 **_Return values_**
 
@@ -370,6 +490,124 @@ When malicious content is detected in the scanned object, `scanResult` will show
 ### ```func (ac *AmaasClient) Destroy()```
 
 Frees up internal resources used by client. It should only be invoked after one has finished scanning and no longer needs the client object.
+
+---
+
+### ```func (ac *AmaasClient) EncodeFile(ctx context.Context, src string, dst string) (e error)```
+
+Transforms a file into a safe, encoded format. The encoded file cannot be accidentally executed and is safe for storage and transport. The encoding is performed server-side using the File Security service.
+
+**_Parameters_**
+
+| Parameter            | Description                                           |
+| -------------------- | ----------------------------------------------------- |
+| ctx (context.Context)| Context for the operation, can be used for cancellation and timeouts |
+| src (string)         | Path to the source file to be encoded                 |
+| dst (string)         | Path where the encoded file will be written           |
+
+**_Return values_**
+
+| Parameter | Description                                     |
+| --------- | ----------------------------------------------- |
+| e (error) | Nil if no error encountered; non-nil otherwise. |
+
+**_Error Conditions_**
+
+- Invalid authentication
+- Invalid source path specified
+- Unable to write to destination path
+- Request timed out (deadline exceeded)
+- Service unreachable
+- Client not ready for operation
+
+---
+
+### ```func (ac *AmaasClient) EncodeReader(ctx context.Context, reader AmaasClientReader, writer io.WriterAt) (e error)```
+
+Transforms data from a custom reader into a safe, encoded format and writes to the provided writer. This method is useful for encoding data from non-file sources such as cloud storage or memory buffers.
+
+**_Parameters_**
+
+| Parameter                  | Description                                           |
+| -------------------------- | ----------------------------------------------------- |
+| ctx (context.Context)      | Context for the operation, can be used for cancellation and timeouts |
+| reader (AmaasClientReader) | Custom reader implementing the AmaasClientReader interface |
+| writer (io.WriterAt)       | Writer where the encoded data will be written; must support random access writes |
+
+**_Return values_**
+
+| Parameter | Description                                     |
+| --------- | ----------------------------------------------- |
+| e (error) | Nil if no error encountered; non-nil otherwise. |
+
+**_Error Conditions_**
+
+- Invalid authentication
+- Reader returns error during data access
+- Writer returns error during write operation
+- Request timed out (deadline exceeded)
+- Service unreachable
+- Client not ready for operation
+
+---
+
+### ```func (ac *AmaasClient) DecodeFile(ctx context.Context, src string, dst string) (e error)```
+
+Restores an encoded file back to its original form. This operation should only be performed in a secure, isolated environment suitable for handling potentially malicious files.
+
+**_Parameters_**
+
+| Parameter            | Description                                           |
+| -------------------- | ----------------------------------------------------- |
+| ctx (context.Context)| Context for the operation, can be used for cancellation and timeouts |
+| src (string)         | Path to the encoded file to be decoded                |
+| dst (string)         | Path where the decoded (original) file will be written|
+
+**_Return values_**
+
+| Parameter | Description                                     |
+| --------- | ----------------------------------------------- |
+| e (error) | Nil if no error encountered; non-nil otherwise. |
+
+**_Error Conditions_**
+
+- Invalid authentication
+- Invalid source path specified
+- Source file is not a valid encoded file
+- Unable to write to destination path
+- Request timed out (deadline exceeded)
+- Service unreachable
+- Client not ready for operation
+
+---
+
+### ```func (ac *AmaasClient) DecodeReader(ctx context.Context, reader AmaasClientReader, writer io.Writer) (e error)```
+
+Restores encoded data from a custom reader back to its original form and writes to the provided writer. This method is useful for decoding data from non-file sources such as cloud storage or memory buffers.
+
+**_Parameters_**
+
+| Parameter                  | Description                                           |
+| -------------------------- | ----------------------------------------------------- |
+| ctx (context.Context)      | Context for the operation, can be used for cancellation and timeouts |
+| reader (AmaasClientReader) | Custom reader implementing the AmaasClientReader interface |
+| writer (io.Writer)         | Writer where the decoded data will be written         |
+
+**_Return values_**
+
+| Parameter | Description                                     |
+| --------- | ----------------------------------------------- |
+| e (error) | Nil if no error encountered; non-nil otherwise. |
+
+**_Error Conditions_**
+
+- Invalid authentication
+- Reader returns error during data access
+- Input data is not valid encoded data
+- Writer returns error during write operation
+- Request timed out (deadline exceeded)
+- Service unreachable
+- Client not ready for operation
 
 ---
 

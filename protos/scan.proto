@@ -9,6 +9,8 @@ option java_package = "com.trend.cloudone.amaas.scan";
 // Interface exported by the server.
 service Scan {
   rpc Run(stream C2S) returns (stream S2C) {}
+  rpc Encode(stream EncodeC2S) returns (stream EncodeS2C) {}
+  rpc Decode(stream DecodeC2S) returns (stream DecodeS2C) {}
 }
 
 enum Stage {
@@ -47,4 +49,61 @@ message S2C {
   repeated int32 bulk_offset = 6;
   repeated int32 bulk_length = 7;
   string session_id = 8;
+}
+
+// Common messages for Encode and Decode operations
+message TransformInit {
+  uint64 file_size = 1;  // Size of input file
+}
+
+message ChunkRequest {
+  int32 offset = 1;
+  int32 length = 2;
+}
+
+message ChunkRequestList {
+  repeated ChunkRequest chunks = 1;
+}
+
+message DataChunkWithOffset {
+  int32 offset = 1;
+  bytes data   = 2;
+}
+
+message DataChunk {
+  bytes data = 1;
+}
+
+message TransformEnd {}
+
+// Encode messages
+message EncodeC2S {
+  oneof payload {
+    TransformInit init            = 1;
+    DataChunkWithOffset data      = 2;  // Client responds to chunk requests with offset
+  }
+}
+
+message EncodeS2C {
+  oneof payload {
+    ChunkRequestList chunk_request = 1;  // Server requests specific chunks
+    DataChunkWithOffset data       = 2;  // Server sends encoded data with offset
+    TransformEnd end               = 3;
+  }
+}
+
+// Decode messages
+message DecodeC2S {
+  oneof payload {
+    TransformInit init            = 1;
+    DataChunkWithOffset data      = 2;  // Client responds to chunk requests with offset
+  }
+}
+
+message DecodeS2C {
+  oneof payload {
+    ChunkRequestList chunk_request = 1;  // Server requests specific chunks
+    DataChunk data                 = 2;  // Server sends decoded data sequentially (no offset)
+    TransformEnd end               = 3;
+  }
 }

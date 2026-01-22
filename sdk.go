@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"google.golang.org/grpc"
 )
@@ -164,4 +165,24 @@ func (ac *AmaasClient) GetAppName() string {
 
 func (ac *AmaasClient) ConfigAppName(ctx context.Context) context.Context {
 	return ac.buildAppNameContext(ctx)
+}
+
+func (ac *AmaasClient) EncodeFile(ctx context.Context, src string, dst string) (e error) {
+	currentLogLevel = getLogLevel()
+	return ac.fileEncodeRun(ctx, src, dst)
+}
+
+func (ac *AmaasClient) EncodeReader(ctx context.Context, reader AmaasClientReader, writer io.WriterAt) (e error) {
+	currentLogLevel = getLogLevel()
+	return ac.readerEncodeRun(ctx, reader, writer)
+}
+
+func (ac *AmaasClient) DecodeFile(ctx context.Context, src string, dst string) (e error) {
+	currentLogLevel = getLogLevel()
+	return ac.fileDecodeRun(ctx, src, dst)
+}
+
+func (ac *AmaasClient) DecodeReader(ctx context.Context, reader AmaasClientReader, writer io.Writer) (e error) {
+	currentLogLevel = getLogLevel()
+	return ac.readerDecodeRun(ctx, reader, writer)
 }

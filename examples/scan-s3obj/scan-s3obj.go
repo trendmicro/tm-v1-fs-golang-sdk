@@ -182,7 +182,7 @@ func (r *S3ClientReader) ReadBytes(offset int64, length int32) ([]byte, error) {
 
 	bytes, err := io.ReadAll(output.Body)
 	if err != nil && err != io.EOF {
-		bytes = nil
+		return nil, fmt.Errorf("error reading S3 object body: %v", err)
 	}
 
 	return bytes, err

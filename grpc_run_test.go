@@ -132,7 +132,7 @@ func TestReadFileBytes(t *testing.T) {
 
 	fileSize := int(result)
 
-	for i := 0; i < NumReadIterations; i++ {
+	for range NumReadIterations {
 		offset := rand.Intn(fileSize)
 		length := rand.Intn(MaxChunkReadSize) + 1
 		end := offset + length
@@ -190,6 +190,10 @@ func (mock *ClientStreamMock) Recv() (*pb.S2C, error) {
 	return resp, nil
 }
 
+func (mock *ClientStreamMock) CloseSend() error {
+	return nil
+}
+
 func (mock *ClientStreamMock) SendFromServer(resp *pb.S2C) error {
 	mock.recvToClient <- resp
 	return nil
@@ -216,9 +220,9 @@ func (mock *ClientStreamMock) RecvToServer() (*pb.C2S, error) {
 // on the testcase, this channel might be completely empty or containing
 // some error.
 
-var errChan chan error = make(chan error, NumReadIterations)
+var errChan = make(chan error, NumReadIterations)
 
-func createMockClientRun(t *testing.T, reader AmaasClientReader, bulk bool) *ClientStreamMock {
+func createMockClientRun(_ *testing.T, reader AmaasClientReader, bulk bool) *ClientStreamMock {
 
 	stream := createClientStreamMock()
 
@@ -319,7 +323,7 @@ func checkRunUploadLoop(t *testing.T, dat *TestDat, reader AmaasClientReader, bu
 
 	reads := make([](*pb.S2C), NumReadIterations)
 
-	for i := 0; i < NumReadIterations; i++ {
+	for i := range NumReadIterations {
 		var s2c *pb.S2C
 		if bulk {
 			s2c = generateRetrS2CBulk(dat.Filesize())
@@ -339,7 +343,7 @@ func checkRunUploadLoop(t *testing.T, dat *TestDat, reader AmaasClientReader, bu
 
 	assert.Equal(t, 0, len(errChan))
 
-	for i := 0; i < NumReadIterations; i++ {
+	for i := range NumReadIterations {
 		resp, err := stream.RecvToServer()
 		assert.Nil(t, err)
 		assert.NotNil(t, resp)
@@ -354,17 +358,17 @@ func checkRunUploadLoop(t *testing.T, dat *TestDat, reader AmaasClientReader, bu
 
 func generateRetrS2C(fileSize int) *pb.S2C {
 	offset := rand.Intn(fileSize)
-	len := rand.Intn(MaxChunkReadSize) + 1
-	end := offset + len
+	chunkLen := rand.Intn(MaxChunkReadSize) + 1
+	end := offset + chunkLen
 	if end > fileSize {
-		len -= (end - fileSize)
+		chunkLen -= (end - fileSize)
 	}
 
 	return &pb.S2C{
 		Stage:  pb.Stage_STAGE_RUN,
 		Cmd:    pb.Command_CMD_RETR,
 		Offset: int32(offset),
-		Length: int32(len),
+		Length: int32(chunkLen),
 	}
 }
 
@@ -394,7 +398,7 @@ func verifyC2SResp(t *testing.T, dat *TestDat, req *pb.S2C, resp *pb.C2S) {
 	origLen := int(req.Length)
 	assert.Equal(t, origLen, len(resp.Chunk))
 
-	for i := 0; i < origLen; i++ {
+	for i := range origLen {
 		assert.Equal(t, dat.ExpectedValueAt(int(req.Offset)+i), resp.Chunk[i])
 	}
 }
@@ -406,7 +410,7 @@ func verifyC2SRespBulk(t *testing.T, dat *TestDat, req *pb.S2C, resp *pb.C2S) {
 	origLen := int(req.BulkLength[0])
 	assert.Equal(t, origLen, len(resp.Chunk))
 
-	for i := 0; i < origLen; i++ {
+	for i := range origLen {
 		assert.Equal(t, dat.ExpectedValueAt(int(req.BulkOffset[0])+i), resp.Chunk[i])
 	}
 }
@@ -488,4 +492,115 @@ func TestScanRunWithInvalidTags(t *testing.T) {
 			assert.Equal(t, tt.expectedErr, err.Error())
 		})
 	}
+}
+
+// Heartbeat stream tests
+
+func TestHeartbeatStreamSendsHeartbeats(t *testing.T) {
+	mock := createClientStreamMock()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hs := newHeartbeatStream(ctx, mock, 50*time.Millisecond)
+
+	// Wait for heartbeats to be sent
+	time.Sleep(250 * time.Millisecond)
+
+	err := hs.CloseSend()
+	assert.Nil(t, err)
+
+	// Drain sentFromClient and count heartbeat messages
+	heartbeatCount := 0
+	for {
+		select {
+		case msg := <-mock.sentFromClient:
+			if msg.Stage == pb.Stage_STAGE_HEARTBEAT {
+				heartbeatCount++
+			}
+		default:
+			goto done
+		}
+	}
+done:
+	// With 50ms interval over 250ms, expect at least 3 heartbeats
+	assert.GreaterOrEqual(t, heartbeatCount, 3)
+}
+
+func TestHeartbeatStreamStopsOnCloseSend(t *testing.T) {
+	mock := createClientStreamMock()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hs := newHeartbeatStream(ctx, mock, 50*time.Millisecond)
+
+	// Let one heartbeat fire
+	time.Sleep(80 * time.Millisecond)
+
+	err := hs.CloseSend()
+	assert.Nil(t, err)
+
+	// Drain any messages already sent and verify heartbeat actually started
+	heartbeatCount := 0
+	for {
+		select {
+		case msg := <-mock.sentFromClient:
+			if msg.Stage == pb.Stage_STAGE_HEARTBEAT {
+				heartbeatCount++
+			}
+		default:
+			goto drained
+		}
+	}
+drained:
+	assert.Greater(t, heartbeatCount, 0, "Expected at least one heartbeat before CloseSend")
+
+	// No more heartbeats should be sent after CloseSend
+	time.Sleep(150 * time.Millisecond)
+
+	select {
+	case <-mock.sentFromClient:
+		t.Fatal("Heartbeat sent after CloseSend")
+	default:
+		// expected: no message
+	}
+}
+
+func TestHeartbeatStreamDataAndHeartbeatCoexist(t *testing.T) {
+	mock := createClientStreamMock()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hs := newHeartbeatStream(ctx, mock, 10*time.Millisecond)
+
+	// Send data messages concurrently with heartbeats
+	dataSent := 0
+	for i := 0; i < 20; i++ {
+		err := hs.Send(&pb.C2S{Stage: pb.Stage_STAGE_RUN, Offset: int32(i)})
+		assert.Nil(t, err)
+		dataSent++
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	err := hs.CloseSend()
+	assert.Nil(t, err)
+
+	// Drain and classify all messages
+	dataCount := 0
+	heartbeatCount := 0
+	for {
+		select {
+		case msg := <-mock.sentFromClient:
+			switch msg.Stage {
+			case pb.Stage_STAGE_HEARTBEAT:
+				heartbeatCount++
+			case pb.Stage_STAGE_RUN:
+				dataCount++
+			}
+		default:
+			goto counted
+		}
+	}
+counted:
+	assert.Equal(t, dataSent, dataCount)
+	assert.Greater(t, heartbeatCount, 0)
 }

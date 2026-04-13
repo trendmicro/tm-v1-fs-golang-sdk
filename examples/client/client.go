@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"log"
+	"os"
+	"strconv"
 	"strings"
 
 	amaasclient "github.com/trendmicro/tm-v1-fs-golang-sdk"
@@ -21,6 +23,8 @@ var (
 	tag           = flag.String("tag", "", "tags to be used for scanning")
 	digest        = flag.Bool("digest", true, "enable/disable digest calculation")
 	caCert        = flag.String("ca_cert", "", "CA certificate for self hosted AMaaS server")
+	timeoutInSecs = flag.Int("timeoutInSecs", 0, "scan timeout in seconds (overrides TM_AM_SCAN_TIMEOUT_SECS env var)")
+	logLevel      = flag.Int("logLevel", -1, "log level 0-5 (overrides TM_AM_LOG_LEVEL env var)")
 )
 
 func main() {
@@ -29,6 +33,16 @@ func main() {
 	fileName := getFileName()
 	if fileName == "" {
 		log.Fatal("Please specify a file to scan using either -filename flag or as the last argument")
+	}
+
+	// Set timeout via env var if flag is provided
+	if *timeoutInSecs > 0 {
+		os.Setenv("TM_AM_SCAN_TIMEOUT_SECS", strconv.Itoa(*timeoutInSecs))
+	}
+
+	// Set log level via env var if flag is provided
+	if *logLevel >= 0 {
+		os.Setenv("TM_AM_LOG_LEVEL", strconv.Itoa(*logLevel))
 	}
 
 	var client *amaasclient.AmaasClient

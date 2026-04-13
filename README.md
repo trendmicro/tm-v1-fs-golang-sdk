@@ -67,6 +67,27 @@ if err != nil {
 
 Replace "YOUR_API_KEY_OR_TOKEN" and "YOUR_REGION" with your actual API key or token and the desired region.
 
+### Initialization with Options
+
+You can also use `NewClientWithOptions` to create a client with functional options for more advanced configuration:
+
+```go
+apiKey := "YOUR_API_KEY_OR_TOKEN"
+region := "YOUR_REGION"
+
+client, err := client.NewClientWithOptions(apiKey, region,
+    client.WithV1Direct(true),
+    client.WithPML(true),
+    client.WithFeedback(true),
+)
+if err != nil {
+    // Handle initialization error
+    panic(err)
+}
+```
+
+See the [NewClientWithOptions API Reference](#func-newclientwithoptionskey-string-region-string-opts-option-c-amaasclient-e-error) for all available options.
+
 ## Basic Usage
 
 Once you have initialized the SDK, you can start using it to interact with our service. Here are some basic examples of how to use the SDK:
@@ -360,7 +381,7 @@ Creates a new instance of the client object, and provisions essential settings, 
 | Parameter       | Description                                                                                                                                                                                  |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | key (string)    | A valid API key must be provided if the environment variable `TM_AM_AUTH_KEY` is not set.                                                                                                    |
-| region (string) | The region you obtained your api key.  Value provided must be one of the Vision One regions: `us-east-1`, `eu-central-1`, `eu-west-2`, `ca-central-1`, `ap-southeast-1`, `ap-southeast-2`, `ap-northeast-1`, `ap-south-1`, `me-central-1` |
+| region (string) | The region you obtained your api key.  Value provided must be one of the Vision One regions: `us-east-1`, `eu-central-1`, `eu-west-2`, `ca-central-1`, `ap-southeast-1`, `ap-southeast-2`, `ap-northeast-1`, `ap-south-1`, `me-central-1`, `af-south-1` |
 
 **_Return values_**
 
@@ -373,6 +394,45 @@ Creates a new instance of the client object, and provisions essential settings, 
 
 - Invalid authentication
 - Invalid region
+
+---
+
+### ```func NewClientWithOptions(key string, region string, opts ...Option) (c *AmaasClient, e error)```
+
+Creates a new instance of the client object with functional options for advanced configuration. This is an alternative to `NewClient` that allows setting multiple configuration options at initialization time.
+
+**_Parameters_**
+
+| Parameter           | Description                                                                                                                                                                                  |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| key (string)        | A valid API key must be provided if the environment variable `TM_AM_AUTH_KEY` is not set.                                                                                                    |
+| region (string)     | The region you obtained your api key.  Value provided must be one of the Vision One regions: `us-east-1`, `eu-central-1`, `eu-west-2`, `ca-central-1`, `ap-southeast-1`, `ap-southeast-2`, `ap-northeast-1`, `ap-south-1`, `me-central-1`, `af-south-1` |
+| opts (...Option)    | Optional functional options to configure the client. See available options below.                                                                                                            |
+
+**_Available Options_**
+
+| Option                              | Description                                                                                                                                                                                                          |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `WithV1Direct(bool)`                | When enabled, V1 regions will connect directly to the Vision One (V1) FQDN endpoint instead of being routed through the Cloud One (C1) endpoint. Default: `false`.                                                  |
+| `WithDigest(bool)`                  | Sets whether to calculate file digest during scan. Default: `true`.                                                                                                                                                  |
+| `WithPML(bool)`                     | Enables Predictive Machine Learning (PML) detection. Default: `false`.                                                                                                                                               |
+| `WithFeedback(bool)`                | Enables SPN feedback. Default: `false`.                                                                                                                                                                              |
+| `WithVerbose(bool)`                 | Enables verbose scan result. Default: `false`.                                                                                                                                                                       |
+| `WithActiveContent(bool)`           | Enables active content detection. Default: `false`.                                                                                                                                                                  |
+| `WithCloudAccountID(string)`        | Sets the cloud account ID that will be automatically appended to all scan tags. The total tag length (including `cloudAccountId=` prefix) cannot exceed 63 characters. Default: empty.                                |
+
+**_Return values_**
+
+| Parameter        | Description                                           |
+| ---------------- | ----------------------------------------------------- |
+| c (*AmaasClient) | Pointer to an client object. Nil if error encountered |
+| e (error)        | Nil if no error encountered; non-nil otherwise.       |
+
+**_Errors Conditions_**
+
+- Invalid authentication
+- Invalid region
+- Invalid option value (e.g., cloudAccountID tag exceeds maximum size)
 
 ---
 

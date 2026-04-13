@@ -175,7 +175,7 @@ func scanFileListInSequence(fileList []string, scanGoodFiles bool, scanner *amaa
 	tr.Passed = true
 	tr.StartTime = time.Now()
 
-	for i := 0; i < len(fileList); i++ {
+	for i := range fileList {
 		filename := fileList[i]
 		log.Printf("Scanning file %s ...\n", filename)
 
@@ -212,7 +212,7 @@ func scanFileListInParallel(fileList []string, scanGoodFiles bool, scanner *amaa
 
 	c := make(chan ScanResult)
 
-	for i := 0; i < len(fileList); i++ {
+	for i := range fileList {
 		filename := fileList[i]
 
 		go func(f string) {
@@ -238,7 +238,7 @@ func scanFileListInParallel(fileList []string, scanGoodFiles bool, scanner *amaa
 		}(filename)
 	}
 
-	for i := 0; i < len(fileList); i++ {
+	for range fileList {
 		sr := <-c
 		tr.CombinedData = append(tr.CombinedData, sr)
 		tr.Passed = tr.Passed && sr.TestPassed

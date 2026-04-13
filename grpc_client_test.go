@@ -100,13 +100,13 @@ func TestCheckAuthKeyNonEmptyEnvVarOverride(t *testing.T) {
 
 func TestGetServiceFQDNEmpty(t *testing.T) {
 
-	fqdn, _ := getServiceFQDN("")
+	fqdn, _ := getServiceFQDN("", false)
 	assert.Equal(t, "", fqdn)
 }
 
 func TestGetServiceFQDNGarbage(t *testing.T) {
 
-	fqdn, _ := getServiceFQDN("blah blah okay")
+	fqdn, _ := getServiceFQDN("blah blah okay", false)
 	assert.Equal(t, "", fqdn)
 }
 
@@ -125,7 +125,7 @@ func TestGetServiceFQDNMapping(t *testing.T) {
 
 	for _, region := range inputs {
 		expected := fmt.Sprintf("antimalware.%s.cloudone.trendmicro.com", region)
-		fqdn, _ := getServiceFQDN(region)
+		fqdn, _ := getServiceFQDN(region, false)
 
 		assert.Equal(t, expected, fqdn)
 	}
@@ -144,14 +144,70 @@ func TestGetServiceFQDNMappingVisionOne(t *testing.T) {
 		"ca-1": "ca-central-1",
 		// "trend-us-1": "",
 		"ae-1": "me-central-1",
+		"za-1": "af-south-1",
 	}
 
 	for c1, v1 := range inputs {
 		expected := fmt.Sprintf("antimalware.%s.cloudone.trendmicro.com", c1)
-		fqdn, _ := getServiceFQDN(v1)
+		fqdn, _ := getServiceFQDN(v1, false)
 
 		assert.Equal(t, expected, fqdn)
 	}
+}
+
+func TestGetServiceFQDNMappingV1Direct(t *testing.T) {
+	// Test V1 regions with V1Direct=true should return V1 FQDN directly
+	var inputs = map[string]string{
+		"us-east-1":      "antimalware-ue1.xdr.trendmicro.com",
+		"ap-south-1":     "antimalware-as1.xdr.trendmicro.com",
+		"eu-central-1":   "antimalware-ec1.xdr.trendmicro.com",
+		"ap-southeast-1": "antimalware-ase1.xdr.trendmicro.com",
+		"ap-southeast-2": "antimalware-ase2.xdr.trendmicro.com",
+		"ap-northeast-1": "antimalware-ane1.xdr.trendmicro.com",
+		"eu-west-2":      "antimalware-ew2.xdr.trendmicro.com",
+		"ca-central-1":   "antimalware-cc1.xdr.trendmicro.com",
+		"me-central-1":   "antimalware-ae1.xdr.trendmicro.com",
+	}
+
+	for v1Region, expectedFqdn := range inputs {
+		fqdn, err := getServiceFQDN(v1Region, true)
+
+		assert.Nil(t, err)
+		assert.Equal(t, expectedFqdn, fqdn)
+	}
+}
+
+func TestGetServiceFQDNC1RegionWithV1DirectTrue(t *testing.T) {
+	// Test C1 regions with V1Direct=true should return error (only V1 regions allowed)
+	var inputs = []string{
+		"us-1",
+		"in-1",
+		"de-1",
+		"sg-1",
+		"au-1",
+		"jp-1",
+		"gb-1",
+		"ca-1",
+		"trend-us-1",
+		"ae-1",
+	}
+
+	for _, region := range inputs {
+		fqdn, err := getServiceFQDN(region, true)
+
+		assert.NotNil(t, err)
+		assert.Equal(t, "", fqdn)
+	}
+}
+
+func TestIdServerAddressV1Direct(t *testing.T) {
+	os.Setenv(_envvarServerAddr, "")
+
+	addr, err := identifyServerAddr("us-east-1", true)
+	expected := fmt.Sprintf("%s:%d", "antimalware-ue1.xdr.trendmicro.com", _defaultCommPort)
+
+	assert.Nil(t, err)
+	assert.Equal(t, expected, addr)
 }
 
 //
@@ -162,7 +218,7 @@ func TestIdServerAddressEmpty(t *testing.T) {
 
 	os.Setenv(_envvarServerAddr, "")
 
-	addr, err := identifyServerAddr("")
+	addr, err := identifyServerAddr("", false)
 
 	assert.NotNil(t, err)
 	assert.Equal(t, "", addr)
@@ -173,7 +229,7 @@ func TestIdServerAddressEmptyWithOverride(t *testing.T) {
 	const testAddr = "this.is.a.fake.server.address:123"
 	os.Setenv(_envvarServerAddr, testAddr)
 
-	addr, err := identifyServerAddr("")
+	addr, err := identifyServerAddr("", false)
 
 	assert.Nil(t, err)
 	assert.Equal(t, testAddr, addr)
@@ -183,7 +239,7 @@ func TestIdServerAddressGarbage(t *testing.T) {
 
 	os.Setenv(_envvarServerAddr, "")
 
-	addr, err := identifyServerAddr("blah blah blah")
+	addr, err := identifyServerAddr("blah blah blah", false)
 
 	assert.NotNil(t, err)
 	assert.Equal(t, "", addr)
@@ -193,8 +249,8 @@ func TestIdServerAddressValid(t *testing.T) {
 
 	os.Setenv(_envvarServerAddr, "")
 
-	addr, err := identifyServerAddr("us-east-1")
-	fqdn, _ := getServiceFQDN("us-east-1")
+	addr, err := identifyServerAddr("us-east-1", false)
+	fqdn, _ := getServiceFQDN("us-east-1", false)
 	expected := fmt.Sprintf("%s:%d", fqdn, _defaultCommPort)
 
 	assert.Nil(t, err)
@@ -206,7 +262,7 @@ func TestIdServerAddressValidWithOverride(t *testing.T) {
 	const testAddr = "this.is.a.fake.server.address:123"
 	os.Setenv(_envvarServerAddr, testAddr)
 
-	addr, err := identifyServerAddr("us-east-1")
+	addr, err := identifyServerAddr("us-east-1", false)
 
 	assert.Nil(t, err)
 	assert.Equal(t, testAddr, addr)
@@ -317,9 +373,9 @@ func TestLogMsgWithOffLevel(t *testing.T) {
 	assert.Equal(t, true, triggered)
 }
 
-var CBTriggeredFlag bool = false
+var CBTriggeredFlag = false
 
-func LoggingCallback(level LogLevel, levelStr string, format string, a ...interface{}) {
+func LoggingCallback(_ LogLevel, _ string, _ string, _ ...any) {
 	CBTriggeredFlag = true
 }
 
@@ -469,8 +525,8 @@ func TestFileClientSha1WithUnsupportedAlgo(t *testing.T) {
 
 func TestFileClientSha256(t *testing.T) {
 
-	file_path, _ := os.Executable()
-	client, _ := InitFileReader(file_path)
+	filePath, _ := os.Executable()
+	client, _ := InitFileReader(filePath)
 	assert.NotNil(t, client)
 	r, _ := client.Hash("sha256")
 	assert.NotEmpty(t, r)
@@ -478,8 +534,8 @@ func TestFileClientSha256(t *testing.T) {
 
 func TestFileClientSha1(t *testing.T) {
 
-	file_path, _ := os.Executable()
-	client, _ := InitFileReader(file_path)
+	filePath, _ := os.Executable()
+	client, _ := InitFileReader(filePath)
 	assert.NotNil(t, client)
 	r, _ := client.Hash("sha1")
 	assert.NotEmpty(t, r)
@@ -487,8 +543,8 @@ func TestFileClientSha1(t *testing.T) {
 
 func TestFileClientSha256WithUnsupportedAlgo(t *testing.T) {
 
-	file_path, _ := os.Executable()
-	client, _ := InitFileReader(file_path)
+	filePath, _ := os.Executable()
+	client, _ := InitFileReader(filePath)
 	assert.NotNil(t, client)
 	r, err := client.Hash("sha224")
 	assert.Empty(t, r)
@@ -777,14 +833,14 @@ func TestCloudAccountIDIntegrationWithScanMethods(t *testing.T) {
 
 func TestAppendCloudAccountIDToTagsTooLong(t *testing.T) {
 	ac := &AmaasClient{}
-	
+
 	// Set a cloudAccountID that would make the tag too long (49 characters)
 	ac.cloudAccountID = "1234567890123456789012345678901234567890123456789" // 49 chars
-	
+
 	// Test with existing tags - should skip the cloudAccountID
 	tags := []string{"tag1", "tag2"}
 	result := ac.appendCloudAccountIDToTags(tags)
-	
+
 	// Should return original tags unchanged (cloudAccountID skipped due to length)
 	assert.Equal(t, tags, result)
 }

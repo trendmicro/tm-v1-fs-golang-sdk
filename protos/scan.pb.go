@@ -26,9 +26,10 @@ const (
 type Stage int32
 
 const (
-	Stage_STAGE_INIT Stage = 0
-	Stage_STAGE_RUN  Stage = 1
-	Stage_STAGE_FINI Stage = 2
+	Stage_STAGE_INIT      Stage = 0
+	Stage_STAGE_RUN       Stage = 1
+	Stage_STAGE_FINI      Stage = 2
+	Stage_STAGE_HEARTBEAT Stage = 3
 )
 
 // Enum value maps for Stage.
@@ -37,11 +38,13 @@ var (
 		0: "STAGE_INIT",
 		1: "STAGE_RUN",
 		2: "STAGE_FINI",
+		3: "STAGE_HEARTBEAT",
 	}
 	Stage_value = map[string]int32{
-		"STAGE_INIT": 0,
-		"STAGE_RUN":  1,
-		"STAGE_FINI": 2,
+		"STAGE_INIT":      0,
+		"STAGE_RUN":       1,
+		"STAGE_FINI":      2,
+		"STAGE_HEARTBEAT": 3,
 	}
 )
 
@@ -1057,13 +1060,14 @@ const file_scan_proto_rawDesc = "" +
 	"\rchunk_request\x18\x01 \x01(\v2\x1f.amaas.scan.v1.ChunkRequestListH\x00R\fchunkRequest\x12.\n" +
 	"\x04data\x18\x02 \x01(\v2\x18.amaas.scan.v1.DataChunkH\x00R\x04data\x12/\n" +
 	"\x03end\x18\x03 \x01(\v2\x1b.amaas.scan.v1.TransformEndH\x00R\x03endB\t\n" +
-	"\apayload*6\n" +
+	"\apayload*K\n" +
 	"\x05Stage\x12\x0e\n" +
 	"\n" +
 	"STAGE_INIT\x10\x00\x12\r\n" +
 	"\tSTAGE_RUN\x10\x01\x12\x0e\n" +
 	"\n" +
-	"STAGE_FINI\x10\x02*%\n" +
+	"STAGE_FINI\x10\x02\x12\x13\n" +
+	"\x0fSTAGE_HEARTBEAT\x10\x03*%\n" +
 	"\aCommand\x12\f\n" +
 	"\bCMD_RETR\x10\x00\x12\f\n" +
 	"\bCMD_QUIT\x10\x012\xc3\x01\n" +

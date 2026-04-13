@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 1.7.1 - 2026-04-13
+
+* Support new region af-south-1
+* Support directly connect to Vision One FQDN
+* Fix timeout issue
+
 ## 1.7.0 - 2026-01-19
 
 * Add `EncodeFile`, `EncodeReader`, `DecodeFile`, `DecodeReader` functions for quarantining malicious files

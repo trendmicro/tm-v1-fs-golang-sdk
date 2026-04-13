@@ -17,6 +17,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/net/http/httpproxy"
@@ -44,16 +45,84 @@ const (
 	appNameHTTPHeader = "tm-app-name"
 	appNameV1FS       = "V1FS"
 
-	maxTagsListSize = 8
-	maxTagSize      = 63
-	maxBatchSize    = int32(1024 * 1024)
+	maxTagsListSize          = 8
+	maxTagSize               = 63
+	maxBatchSize             = int32(1024 * 1024)
+	defaultHeartbeatInterval = 30 * time.Second
 )
 
-type LogLevel int
-type LoggerCallback func(level LogLevel, levelStr string, format string, a ...interface{})
+// scanStream defines the minimal interface used by runInitRequest and runUploadLoop.
+type scanStream interface {
+	Send(*pb.C2S) error
+	Recv() (*pb.S2C, error)
+	CloseSend() error
+}
 
-var currentLogLevel LogLevel = LogLevelOff
-var userLogger LoggerCallback = nil
+// heartbeatStream wraps a pb.Scan_RunClient to add thread-safe Send() via a mutex
+// and a background goroutine that sends periodic heartbeat messages to keep the
+// connection alive through ALB idle timeout.
+type heartbeatStream struct {
+	stream   pb.Scan_RunClient
+	mu       sync.Mutex
+	cancel   context.CancelFunc
+	done     chan struct{}
+	interval time.Duration
+}
+
+func newHeartbeatStream(ctx context.Context, stream pb.Scan_RunClient, interval time.Duration) *heartbeatStream {
+	ctx, cancel := context.WithCancel(ctx)
+	hs := &heartbeatStream{
+		stream:   stream,
+		cancel:   cancel,
+		done:     make(chan struct{}),
+		interval: interval,
+	}
+	go hs.heartbeatLoop(ctx)
+	return hs
+}
+
+func (hs *heartbeatStream) Send(msg *pb.C2S) error {
+	hs.mu.Lock()
+	defer hs.mu.Unlock()
+	return hs.stream.Send(msg)
+}
+
+func (hs *heartbeatStream) Recv() (*pb.S2C, error) {
+	return hs.stream.Recv()
+}
+
+func (hs *heartbeatStream) CloseSend() error {
+	hs.cancel()
+	<-hs.done
+	return hs.stream.CloseSend()
+}
+
+func (hs *heartbeatStream) heartbeatLoop(ctx context.Context) {
+	defer close(hs.done)
+	ticker := time.NewTicker(hs.interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			hs.mu.Lock()
+			err := hs.stream.Send(&pb.C2S{Stage: pb.Stage_STAGE_HEARTBEAT})
+			hs.mu.Unlock()
+			if err != nil {
+				logMsg(LogLevelDebug, "Heartbeat send failed: %v", err)
+				return
+			}
+			logMsg(LogLevelDebug, "Heartbeat sent")
+		}
+	}
+}
+
+type LogLevel int
+type LoggerCallback func(level LogLevel, levelStr string, format string, a ...any)
+
+var currentLogLevel = LogLevelOff
+var userLogger LoggerCallback
 
 type contextKey string
 
@@ -181,8 +250,8 @@ func (reader *AmaasClientBufferReader) ReadBytes(offset int64, length int32) ([]
 	// receives the returned slice won't do any modification to the slice and alter the
 	// underlying backing array data.
 
-	buffer_length := len(reader.buffer)
-	if (offset + int64(length)) > int64(buffer_length) {
+	bufferLength := len(reader.buffer)
+	if (offset + int64(length)) > int64(bufferLength) {
 		return reader.buffer[offset:], io.EOF
 	}
 
@@ -252,14 +321,14 @@ func getHashValue(dataReader AmaasClientReader) (string, string, error) {
 	sha256 := sha256.New()
 
 	for length > 0 {
-		var batch_size = maxBatchSize
+		var batchSize = maxBatchSize
 
-		if int64(batch_size) > length {
-			batch_size = int32(length)
+		if int64(batchSize) > length {
+			batchSize = int32(length)
 		}
 
-		bytes, err := dataReader.ReadBytes(offset, batch_size)
-		if err != nil || int32(len(bytes)) != batch_size {
+		bytes, err := dataReader.ReadBytes(offset, batchSize)
+		if err != nil || int32(len(bytes)) != batchSize {
 			return "", "", err
 		}
 
@@ -273,14 +342,14 @@ func getHashValue(dataReader AmaasClientReader) (string, string, error) {
 			return "", "", err
 		}
 
-		offset += int64(batch_size)
-		length -= int64(batch_size)
+		offset += int64(batchSize)
+		length -= int64(batchSize)
 	}
 
-	var s_sha1 = fmt.Sprintf("sha1:%s", hex.EncodeToString(sha1.Sum(nil)))
-	var s_sha256 = fmt.Sprintf("sha256:%s", hex.EncodeToString(sha256.Sum(nil)))
+	var sSha1 = fmt.Sprintf("sha1:%s", hex.EncodeToString(sha1.Sum(nil)))
+	var sSha256 = fmt.Sprintf("sha256:%s", hex.EncodeToString(sha256.Sum(nil)))
 
-	return s_sha1, s_sha256, nil
+	return sSha1, sSha256, nil
 }
 
 func scanRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, dataReader AmaasClientReader,
@@ -308,12 +377,14 @@ func scanRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, da
 		return makeFailedScanJSONResp(), sanitizeGRPCError(err)
 	}
 
-	defer func(stream pb.Scan_RunClient) {
-		err := stream.CloseSend()
+	hbStream := newHeartbeatStream(ctx, stream, defaultHeartbeatInterval)
+
+	defer func() {
+		err := hbStream.CloseSend()
 		if err != nil {
 			panic(err)
 		}
-	}(stream)
+	}()
 
 	size, _ := dataReader.DataSize()
 
@@ -328,7 +399,7 @@ func scanRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, da
 		hashSha1, hashSha256, _ = getHashValue(dataReader)
 	}
 
-	if err = runInitRequest(stream, dataReader.Identifier(), uint64(size), hashSha256, hashSha1, tags, pml, bulk, feedback,
+	if err = runInitRequest(hbStream, dataReader.Identifier(), uint64(size), hashSha256, hashSha1, tags, pml, bulk, feedback,
 		verbose, activeContent); err != nil {
 		return makeFailedScanJSONResp(), err
 	}
@@ -336,7 +407,7 @@ func scanRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, da
 	var result string
 	var totalUpload int32
 
-	if result, totalUpload, err = runUploadLoop(stream, dataReader, bulk); err != nil {
+	if result, totalUpload, err = runUploadLoop(hbStream, dataReader, bulk); err != nil {
 		return makeFailedScanJSONResp(), err
 	}
 
@@ -345,7 +416,7 @@ func scanRun(ctx context.Context, cancel context.CancelFunc, c pb.ScanClient, da
 	return result, nil
 }
 
-func runInitRequest(stream pb.Scan_RunClient, identifier string, dataSize uint64, hashSha256 string, hashSha1 string,
+func runInitRequest(stream scanStream, identifier string, dataSize uint64, hashSha256 string, hashSha1 string,
 	tags []string, pml bool, bulk bool, feedback bool, verbose bool, activeContent bool) error {
 	if err := stream.Send(&pb.C2S{Stage: pb.Stage_STAGE_INIT,
 		FileName: identifier, RsSize: dataSize, FileSha256: hashSha256, FileSha1: hashSha1, Tags: tags, Trendx: pml,
@@ -369,7 +440,7 @@ func runInitRequest(stream pb.Scan_RunClient, identifier string, dataSize uint64
 	return nil
 }
 
-func runUploadLoop(stream pb.Scan_RunClient, dataReader AmaasClientReader, bulk bool) (result string, totalUpload int32, overallErr error) {
+func runUploadLoop(stream scanStream, dataReader AmaasClientReader, bulk bool) (result string, totalUpload int32, overallErr error) {
 
 	result = ""
 	totalUpload = 0
@@ -425,25 +496,23 @@ func runUploadLoop(stream pb.Scan_RunClient, dataReader AmaasClientReader, bulk 
 			for i := 0; i < len(length); i++ {
 				logMsg(LogLevelDebug, MSG("MSG_ID_DEBUG_RETR"), offset[i], length[i])
 
-				if buf, err := dataReader.ReadBytes(int64(offset[i]), length[i]); err != nil && err != io.EOF {
-
+				buf, err := dataReader.ReadBytes(int64(offset[i]), length[i])
+				if err != nil && err != io.EOF {
 					msg := fmt.Sprintf(MSG("MSG_ID_ERR_RETR_DATA"), err.Error())
 					logMsg(LogLevelError, msg)
 					overallErr = makeInternalError(msg)
 					return
-
-				} else {
-					if err := stream.Send(&pb.C2S{
-						Stage:  pb.Stage_STAGE_RUN,
-						Offset: offset[i],
-						Chunk:  buf}); err != nil {
-						err = sanitizeGRPCError(err)
-						msg := fmt.Sprintf(MSG("MSG_ID_ERR_SEND_DATA"), err.Error())
-						logMsg(LogLevelError, msg)
-						break
-					}
-					totalUpload += length[i]
 				}
+				if err := stream.Send(&pb.C2S{
+					Stage:  pb.Stage_STAGE_RUN,
+					Offset: offset[i],
+					Chunk:  buf}); err != nil {
+					err = sanitizeGRPCError(err)
+					msg := fmt.Sprintf(MSG("MSG_ID_ERR_SEND_DATA"), err.Error())
+					logMsg(LogLevelError, msg)
+					break
+				}
+				totalUpload += length[i]
 			}
 
 		default:
@@ -950,7 +1019,7 @@ func (ac *AmaasClient) setupComm() error {
 		ac.isC1Token = isC1Token(ac.authKey)
 	}
 
-	var largerWindowSize int32 = 0
+	var largerWindowSize int32
 	v, ok := os.LookupEnv(_envInitWindowSize)
 	if ok {
 		if val, err := strconv.ParseInt(v, 10, 32); err == nil {
@@ -1017,21 +1086,21 @@ func (ac *AmaasClient) setupComm() error {
 func (ac *AmaasClient) setupProxy() (bool, func(ctx context.Context, addr string) (net.Conn, error), error) {
 	config := httpproxy.FromEnvironment()
 
-	addrUrl := &url.URL{
+	addrURL := &url.URL{
 		Scheme: "https",
 		Host:   ac.addr,
 	}
 
-	proxyUrl, err := config.ProxyFunc()(addrUrl)
+	proxyURL, err := config.ProxyFunc()(addrURL)
 	if err != nil {
 		return false, nil, err
 	}
 
-	if proxyUrl == nil {
+	if proxyURL == nil {
 		return false, nil, nil
 	}
 
-	if proxyUrl.Scheme == "socks5" {
+	if proxyURL.Scheme == "socks5" {
 		var dc proxy.ContextDialer
 
 		proxyAuth := proxy.Auth{
@@ -1039,7 +1108,7 @@ func (ac *AmaasClient) setupProxy() (bool, func(ctx context.Context, addr string
 			Password: os.Getenv("PROXY_PASS"),
 		}
 
-		dialer, err := proxy.SOCKS5("tcp", proxyUrl.Host, &proxyAuth, proxy.Direct)
+		dialer, err := proxy.SOCKS5("tcp", proxyURL.Host, &proxyAuth, proxy.Direct)
 		if err != nil {
 			return false, nil, err
 		}
@@ -1052,9 +1121,8 @@ func (ac *AmaasClient) setupProxy() (bool, func(ctx context.Context, addr string
 			return dc.DialContext(ctx, "tcp", addr)
 		}
 		return true, d, nil
-	} else {
-		return false, nil, nil
 	}
+	return false, nil, nil
 }
 
 func (ac *AmaasClient) buildAuthContext(ctx context.Context) context.Context {
@@ -1095,7 +1163,7 @@ func checkAuthKey(authKey string) (string, error) {
 		return "", nil
 	}
 
-	var auth string = authKey
+	var auth = authKey
 
 	envAuthKey := os.Getenv(_envvarAuthKey)
 
@@ -1111,7 +1179,7 @@ func isExplicitAPIKey(auth string) bool {
 	return strings.HasPrefix(strings.ToLower(auth), "apikey")
 }
 
-func isC1Token(auth string) bool {
+func isC1Token(_ string) bool {
 
 	//for now, we may only support apikey, not customer token or service token
 	return false
@@ -1146,14 +1214,14 @@ func isC1Token(auth string) bool {
 // 	return strings.HasPrefix(auth, "tmc") || isExplicitAPIKey(auth)
 // }
 
-func identifyServerAddr(region string) (string, error) {
+func identifyServerAddr(region string, useDirectV1 bool) (string, error) {
 	envOverrideAddr := os.Getenv(_envvarServerAddr)
 
 	if envOverrideAddr != "" {
 		return envOverrideAddr, nil
 	}
 
-	fqdn, err := getServiceFQDN(region)
+	fqdn, err := getServiceFQDN(region, useDirectV1)
 	if err != nil {
 		return "", err
 	}
@@ -1172,52 +1240,43 @@ func getDefaultScanTimeout() (int, error) {
 	envScanTimeoutSecs := os.Getenv(_envvarScanTimeoutSecs)
 
 	if envScanTimeoutSecs != "" {
-		if val, err := strconv.Atoi(envScanTimeoutSecs); err != nil {
+		val, err := strconv.Atoi(envScanTimeoutSecs)
+		if err != nil {
 			return 0, fmt.Errorf(MSG("MSG_ID_ERR_ENVVAR_PARSING"), _envvarScanTimeoutSecs)
-		} else {
-			return val, nil
 		}
+		return val, nil
 	}
 
 	return _defaultTimeoutSecs, nil
 }
 
-func getServiceFQDN(targetRegion string) (string, error) {
-
-	// ensure the region exists in v1 or c1
-	region := targetRegion
-	if !slices.Contains(AllRegions, region) {
-		return "", fmt.Errorf(MSG("MSG_ID_ERR_INVALID_REGION"), region, AllRegions)
-	}
-	// if it is a V1 region, map it to a C1 region
-	if slices.Contains(V1Regions, region) {
-		regionClone := ""
-		exists := false
-		// Make sure the v1 region is part of the cloudone.SupportedV1Regions and cloudone.V1ToC1RegionMapping lists
-		if regionClone, exists = V1ToC1RegionMapping[region]; !exists || !slices.Contains(SupportedV1Regions, region) {
-			return "", fmt.Errorf(MSG("MSG_ID_ERR_INVALID_REGION"), region, AllRegions)
+func getServiceFQDN(targetRegion string, useDirectV1 bool) (string, error) {
+	if useDirectV1 {
+		if slices.Contains(SupportedV1Regions, targetRegion) {
+			if fqdn, exists := V1RegionFQDNMapping[targetRegion]; exists {
+				return fqdn, nil
+			}
 		}
-		region = regionClone
+		return "", fmt.Errorf(MSG("MSG_ID_ERR_INVALID_REGION"), targetRegion, SupportedV1Regions)
 	}
 
-	mapping := map[string]string{
-		C1_US_REGION:    "antimalware.us-1.cloudone.trendmicro.com",
-		C1_IN_REGION:    "antimalware.in-1.cloudone.trendmicro.com",
-		C1_DE_REGION:    "antimalware.de-1.cloudone.trendmicro.com",
-		C1_SG_REGION:    "antimalware.sg-1.cloudone.trendmicro.com",
-		C1_AU_REGION:    "antimalware.au-1.cloudone.trendmicro.com",
-		C1_JP_REGION:    "antimalware.jp-1.cloudone.trendmicro.com",
-		C1_GB_REGION:    "antimalware.gb-1.cloudone.trendmicro.com",
-		C1_CA_REGION:    "antimalware.ca-1.cloudone.trendmicro.com",
-		C1_TREND_REGION: "antimalware.trend-us-1.cloudone.trendmicro.com",
-		C1_AE_REGION:    "antimalware.ae-1.cloudone.trendmicro.com",
+	// V1 region -> map to C1 region -> use C1RegionFQDNMapping
+	if slices.Contains(SupportedV1Regions, targetRegion) {
+		if c1Region, exists := V1ToC1RegionMapping[targetRegion]; exists {
+			if fqdn, exists := C1RegionFQDNMapping[c1Region]; exists {
+				return fqdn, nil
+			}
+		}
 	}
 
-	fqdn, exists := mapping[region]
-	if !exists {
-		return "", fmt.Errorf(MSG("MSG_ID_ERR_INVALID_REGION"), region, AllRegions)
+	// C1 region -> use C1RegionFQDNMapping
+	if slices.Contains(SupportedC1Regions, targetRegion) {
+		if fqdn, exists := C1RegionFQDNMapping[targetRegion]; exists {
+			return fqdn, nil
+		}
 	}
-	return fqdn, nil
+
+	return "", fmt.Errorf(MSG("MSG_ID_ERR_INVALID_REGION"), targetRegion, AllValidRegions)
 }
 
 //////////////////////////////////////
@@ -1245,7 +1304,7 @@ var level2strMap = map[LogLevel]string{
 	LogLevelDebug:   "DEBUG",
 }
 
-func logMsg(level LogLevel, format string, a ...interface{}) {
+func logMsg(level LogLevel, format string, a ...any) {
 
 	// This function never be invoked with level = LogLevelOff
 	if level <= LogLevelOff {

@@ -39,33 +39,160 @@ type AmaasClientReader interface {
 	ReadBytes(offset int64, length int32) ([]byte, error)
 }
 
-func NewClient(key string, region string) (c *AmaasClient, e error) {
+// config holds the configuration for creating an AmaasClient.
+type config struct {
+	Key            string
+	Region         string
+	V1Direct       bool
+	Digest         bool
+	PML            bool
+	Feedback       bool
+	Verbose        bool
+	ActiveContent  bool
+	CloudAccountID string
+}
 
-	ac := &AmaasClient{digest: true}
+// Option is a functional option for configuring config.
+type Option func(*config) error
 
-	ac.appName = appNameV1FS
+// WithDigest sets whether to calculate file digest during scan.
+func WithDigest(digest bool) Option {
+	return func(cfg *config) error {
+		cfg.Digest = digest
+		return nil
+	}
+}
 
+// WithPML enables PML feature.
+func WithPML(pml bool) Option {
+	return func(cfg *config) error {
+		cfg.PML = pml
+		return nil
+	}
+}
+
+// WithFeedback enables feedback feature.
+func WithFeedback(feedback bool) Option {
+	return func(cfg *config) error {
+		cfg.Feedback = feedback
+		return nil
+	}
+}
+
+// WithVerbose enables verbose output.
+func WithVerbose(verbose bool) Option {
+	return func(cfg *config) error {
+		cfg.Verbose = verbose
+		return nil
+	}
+}
+
+// WithActiveContent enables active content feature.
+func WithActiveContent(activeContent bool) Option {
+	return func(cfg *config) error {
+		cfg.ActiveContent = activeContent
+		return nil
+	}
+}
+
+// WithCloudAccountID sets the cloud account ID.
+func WithCloudAccountID(cloudAccountID string) Option {
+	return func(cfg *config) error {
+		if cloudAccountID == "" {
+			cfg.CloudAccountID = cloudAccountID
+			return nil
+		}
+
+		// Calculate the total tag length with "cloudAccountId=" prefix
+		cloudAccountTag := fmt.Sprintf("cloudAccountId=%s", cloudAccountID)
+		if len(cloudAccountTag) > maxTagSize {
+			return fmt.Errorf("cloudAccountID tag 'cloudAccountId=%s' exceeds maximum tag size of %d characters", cloudAccountID, maxTagSize)
+		}
+
+		cfg.CloudAccountID = cloudAccountID
+		return nil
+	}
+}
+
+// WithV1Direct configures whether to connect directly to Vision One (V1) endpoint.
+// When enabled, V1 regions will use V1 FQDN directly.
+// When disabled (default), V1 regions will be routed through Cloud One (C1) endpoint.
+func WithV1Direct(v1Direct bool) Option {
+	return func(cfg *config) error {
+		cfg.V1Direct = v1Direct
+		return nil
+	}
+}
+
+// newDefaultConfig creates a new config with default values.
+func newDefaultConfig(key string, region string) *config {
+	return &config{
+		Key:    key,
+		Region: region,
+		Digest: true,
+	}
+}
+
+// initFromConfig initializes the AmaasClient from the given config and applies defaults.
+func (ac *AmaasClient) initFromConfig(cfg *config) error {
 	var err error
 
-	if ac.authKey, err = checkAuthKey(key); err != nil {
-		return nil, err
+	// Validate and transform key
+	if ac.authKey, err = checkAuthKey(cfg.Key); err != nil {
+		return err
 	}
 
-	if ac.addr, err = identifyServerAddr(region); err != nil {
-		return nil, err
+	// Transform region to server address
+	if ac.addr, err = identifyServerAddr(cfg.Region, cfg.V1Direct); err != nil {
+		return err
 	}
 
+	// Apply config values
+	ac.digest = cfg.Digest
+	ac.pml = cfg.PML
+	ac.feedback = cfg.Feedback
+	ac.verbose = cfg.Verbose
+	ac.activeContent = cfg.ActiveContent
+	ac.cloudAccountID = cfg.CloudAccountID
+	// Apply defaults for internal settings
+	ac.appName = appNameV1FS
 	ac.useTLS, ac.verifyCert = retrieveTLSSettings()
 
 	if ac.timeoutSecs, err = getDefaultScanTimeout(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func NewClient(key string, region string) (c *AmaasClient, e error) {
+	return NewClientWithOptions(key, region)
+}
+
+func NewClientWithOptions(key string, region string, opts ...Option) (c *AmaasClient, e error) {
+
+	// Create config with defaults
+	cfg := newDefaultConfig(key, region)
+
+	// Apply options to config
+	for _, opt := range opts {
+		if err := opt(cfg); err != nil {
+			return nil, err
+		}
+	}
+
+	// Create client and initialize from config
+	ac := &AmaasClient{}
+
+	if err := ac.initFromConfig(cfg); err != nil {
 		return nil, err
 	}
 
-	if err = ac.archHandler.initHandler(ac); err != nil {
+	if err := ac.archHandler.initHandler(ac); err != nil {
 		return nil, err
 	}
 
-	if err = ac.setupComm(); err != nil {
+	if err := ac.setupComm(); err != nil {
 		return nil, err
 	}
 
@@ -139,7 +266,7 @@ func SetLoggingLevel(level LogLevel) {
 	currentLogLevel = level
 }
 
-func ConfigLoggingCallback(f func(level LogLevel, levelStr string, format string, a ...interface{})) {
+func ConfigLoggingCallback(f func(level LogLevel, levelStr string, format string, a ...any)) {
 	userLogger = f
 }
 

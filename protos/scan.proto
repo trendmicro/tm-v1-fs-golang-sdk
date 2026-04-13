@@ -17,6 +17,7 @@ enum Stage {
   STAGE_INIT = 0;
   STAGE_RUN = 1;
   STAGE_FINI = 2;
+  STAGE_HEARTBEAT = 3;
 }
 
 message C2S {

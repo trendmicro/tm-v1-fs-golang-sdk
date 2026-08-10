@@ -24,7 +24,7 @@ message C2S {
   Stage stage = 1;
   string file_name = 2;
   uint64 rs_size = 3;
-  int32 offset = 4;
+  int64 offset = 4;
   bytes chunk = 5;
   bool trendx = 6;
   string file_sha1 = 7;
@@ -44,10 +44,10 @@ enum Command {
 message S2C {
   Stage stage = 1;
   Command cmd = 2;
-  int32 offset = 3;
+  int64 offset = 3;
   int32 length = 4;
   string result = 5;
-  repeated int32 bulk_offset = 6;
+  repeated int64 bulk_offset = 6;
   repeated int32 bulk_length = 7;
   string session_id = 8;
 }

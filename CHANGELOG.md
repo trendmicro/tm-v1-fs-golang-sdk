@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 1.7.2 - 2026-08-10
+
+* Support new region ap-southeast-3 (Indonesia)
+* Support scan gateway for FSCS and FSVA
+* Add an Error Handling section to the README documenting SDK and service error codes and messages
+* Upgrade gRPC and other dependencies
+* Fix CVE-2026-24051, CVE-2026-29181, and CVE-2026-39883
+
 ## 1.7.1 - 2026-04-13
 
 * Support new region af-south-1

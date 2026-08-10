@@ -145,6 +145,7 @@ func TestGetServiceFQDNMappingVisionOne(t *testing.T) {
 		// "trend-us-1": "",
 		"ae-1": "me-central-1",
 		"za-1": "af-south-1",
+		"id-1": "ap-southeast-3",
 	}
 
 	for c1, v1 := range inputs {

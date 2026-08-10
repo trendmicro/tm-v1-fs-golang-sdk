@@ -478,7 +478,7 @@ func runUploadLoop(stream scanStream, dataReader AmaasClientReader, bulk bool) (
 		case pb.Command_CMD_RETR:
 
 			var length []int32
-			var offset []int32
+			var offset []int64
 
 			if bulk {
 				length = in.BulkLength
@@ -496,7 +496,7 @@ func runUploadLoop(stream scanStream, dataReader AmaasClientReader, bulk bool) (
 			for i := 0; i < len(length); i++ {
 				logMsg(LogLevelDebug, MSG("MSG_ID_DEBUG_RETR"), offset[i], length[i])
 
-				buf, err := dataReader.ReadBytes(int64(offset[i]), length[i])
+				buf, err := dataReader.ReadBytes(offset[i], length[i])
 				if err != nil && err != io.EOF {
 					msg := fmt.Sprintf(MSG("MSG_ID_ERR_RETR_DATA"), err.Error())
 					logMsg(LogLevelError, msg)

@@ -317,6 +317,51 @@ func TestRunUploadLoopNormalForFileReaderBulk(t *testing.T) {
 	checkRunUploadLoop(t, dat, reader, true)
 }
 
+// offsetSpyReader is a minimal AmaasClientReader test double that only
+// records the offset/length it was asked to read -- it doesn't need real
+// backing data, because this test is proving the *offset value* survives
+// runUploadLoop() without int32 truncation, not exercising real I/O.
+
+type offsetSpyReader struct {
+	gotOffset int64
+	gotLength int32
+}
+
+func (r *offsetSpyReader) Identifier() string       { return "spy" }
+func (r *offsetSpyReader) DataSize() (int64, error) { return 1 << 33, nil } // pretend 8GiB source
+func (r *offsetSpyReader) ReadBytes(offset int64, length int32) ([]byte, error) {
+	r.gotOffset = offset
+	r.gotLength = length
+	return make([]byte, length), nil
+}
+
+// Regression test for the int32 bulk_offset overflow: once scan.proto
+// widens bulk_offset to int64, a server request beyond math.MaxInt32
+// must reach ReadBytes() as the exact same int64 value, not a
+// truncated/sign-flipped int32.
+
+func TestRunUploadLoopBulkLargeOffsetNotTruncated(t *testing.T) {
+	const beyondInt32 = int64(1) << 32 // 4294967296
+
+	reader := &offsetSpyReader{}
+	stream := createMockClientRun(t, reader, true)
+
+	s2c := &pb.S2C{
+		Stage:      pb.Stage_STAGE_RUN,
+		Cmd:        pb.Command_CMD_RETR,
+		BulkOffset: []int64{beyondInt32},
+		BulkLength: []int32{4096},
+	}
+	assert.Nil(t, stream.SendFromServer(s2c))
+
+	resp, err := stream.RecvToServer()
+	assert.Nil(t, err)
+	assert.NotNil(t, resp)
+
+	assert.Equal(t, beyondInt32, reader.gotOffset, "ReadBytes must receive the true offset, not a truncated int32")
+	assert.Equal(t, int32(4096), reader.gotLength)
+}
+
 func checkRunUploadLoop(t *testing.T, dat *TestDat, reader AmaasClientReader, bulk bool) {
 	stream := createMockClientRun(t, reader, bulk)
 	assert.NotNil(t, stream)
@@ -367,7 +412,7 @@ func generateRetrS2C(fileSize int) *pb.S2C {
 	return &pb.S2C{
 		Stage:  pb.Stage_STAGE_RUN,
 		Cmd:    pb.Command_CMD_RETR,
-		Offset: int32(offset),
+		Offset: int64(offset),
 		Length: int32(chunkLen),
 	}
 }
@@ -381,7 +426,7 @@ func generateRetrS2CBulk(fileSize int) *pb.S2C {
 	}
 
 	bulkLength := []int32{int32(length)}
-	bulkOffset := []int32{int32(offset)}
+	bulkOffset := []int64{int64(offset)}
 
 	return &pb.S2C{
 		Stage:      pb.Stage_STAGE_RUN,
@@ -575,7 +620,7 @@ func TestHeartbeatStreamDataAndHeartbeatCoexist(t *testing.T) {
 	// Send data messages concurrently with heartbeats
 	dataSent := 0
 	for i := 0; i < 20; i++ {
-		err := hs.Send(&pb.C2S{Stage: pb.Stage_STAGE_RUN, Offset: int32(i)})
+		err := hs.Send(&pb.C2S{Stage: pb.Stage_STAGE_RUN, Offset: int64(i)})
 		assert.Nil(t, err)
 		dataSent++
 		time.Sleep(5 * time.Millisecond)

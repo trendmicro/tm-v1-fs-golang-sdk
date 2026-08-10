@@ -381,7 +381,7 @@ Creates a new instance of the client object, and provisions essential settings, 
 | Parameter       | Description                                                                                                                                                                                  |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | key (string)    | A valid API key must be provided if the environment variable `TM_AM_AUTH_KEY` is not set.                                                                                                    |
-| region (string) | The region you obtained your api key.  Value provided must be one of the Vision One regions: `us-east-1`, `eu-central-1`, `eu-west-2`, `ca-central-1`, `ap-southeast-1`, `ap-southeast-2`, `ap-northeast-1`, `ap-south-1`, `me-central-1`, `af-south-1` |
+| region (string) | The region you obtained your api key.  Value provided must be one of the Vision One regions: `us-east-1`, `eu-central-1`, `eu-west-2`, `ca-central-1`, `ap-southeast-1`, `ap-southeast-2`, `ap-northeast-1`, `ap-south-1`, `me-central-1`, `af-south-1`, `ap-southeast-3` |
 
 **_Return values_**
 
@@ -406,7 +406,7 @@ Creates a new instance of the client object with functional options for advanced
 | Parameter           | Description                                                                                                                                                                                  |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | key (string)        | A valid API key must be provided if the environment variable `TM_AM_AUTH_KEY` is not set.                                                                                                    |
-| region (string)     | The region you obtained your api key.  Value provided must be one of the Vision One regions: `us-east-1`, `eu-central-1`, `eu-west-2`, `ca-central-1`, `ap-southeast-1`, `ap-southeast-2`, `ap-northeast-1`, `ap-south-1`, `me-central-1`, `af-south-1` |
+| region (string)     | The region you obtained your api key.  Value provided must be one of the Vision One regions: `us-east-1`, `eu-central-1`, `eu-west-2`, `ca-central-1`, `ap-southeast-1`, `ap-southeast-2`, `ap-northeast-1`, `ap-south-1`, `me-central-1`, `af-south-1`, `ap-southeast-3` |
 | opts (...Option)    | Optional functional options to configure the client. See available options below.                                                                                                            |
 
 **_Available Options_**
@@ -692,6 +692,89 @@ For setting up custom logging by provisioning the SDK with a custom callback fun
 | Parameter    | Description                                                                                            |
 | ------------ | ------------------------------------------------------------------------------------------------------ |
 | f (function) | A function with the prototype `func(level LogLevel, levelStr string, format string, a ...interface{})` |
+
+## Error Handling
+
+Most errors returned by the File Security Go SDK are gRPC `status` errors, consisting of an error-code component and a message string (implemented by the [`status`](https://pkg.go.dev/google.golang.org/grpc/status) package). Extract the code and message with `status.FromError`:
+
+```go
+import (
+    "google.golang.org/grpc/codes"
+    "google.golang.org/grpc/status"
+)
+
+result, err := client.ScanFile(fileName, tags)
+if err != nil {
+    if s, ok := status.FromError(err); ok {
+        fmt.Printf("code: %d (%s), message: %s\n", s.Code(), s.Code(), s.Message())
+    } else {
+        // Not a gRPC status error — see note 1 under the table below.
+        fmt.Printf("error: %v\n", err)
+    }
+}
+```
+
+The error-code values are those defined in the [`codes`](https://pkg.go.dev/google.golang.org/grpc/codes) package.
+
+The **Source** column classifies each error:
+
+- **SDK-native** — produced entirely by the SDK on the client side, without contacting the service (argument/region/tag validation, TLS and connection setup, file access, timeout, transport errors). Includes the plain-Go-error rows marked `—` (see note 1).
+- **SDK-mapped** — triggered by a gRPC response from the service, but the message shown to the caller is a fixed string produced by the SDK; the service's own text is not surfaced.
+- **Service** — the service's message is relayed to the caller. For these the SDK normalizes the gRPC code to `Internal` (13), so distinguish them by their **message text**.
+
+| gRPC code (as received) | Message returned to the caller | Cause | Source |
+|-------------------------|--------------------------------|-------|--------|
+| `Unknown` (2) | `Ecountered an unknown error` | Unclassified error returned by the service | SDK-mapped |
+| `DeadlineExceeded` (4) | `Context deadline exceeded` | Request timed out before completion | SDK-native |
+| `PermissionDenied` (7) | `API key does not have permission to access the service` | The SDK feature is not enabled for the account | SDK-mapped |
+| `Unimplemented` (12) | `Client SDK not compatible with the Anti-malware  Service - please upgrade` | SDK is outdated/incompatible, **or** Predictive Machine Learning was requested but the service does not support it | SDK-mapped |
+| `Internal` (13) | `Must provide an API key to use the client` | No API key supplied when creating the client | SDK-native |
+| `Internal` (13) | `Server certificate verification failed` | Server TLS certificate could not be verified | SDK-native |
+| `Internal` (13) | `Use of TLS for client-server communication required but not detected` | TLS is required but the connection is not using it | SDK-native |
+| `Internal` (13) | `Too many requests. HTTP Status: 429; Exceeds rate limit` | Rejected by the transport for exceeding the rate limit | SDK-native |
+| `Internal` (13) | `Client is not ready to carry out scans, possibly due to invocation of Destroy()` | Client already destroyed, or not ready to scan | SDK-native |
+| `Internal` (13) | `Client is not ready to carry out scans, due to <reason>` | Client failed to initialize for the operation | SDK-native |
+| `Internal` (13) | `Failed to retrieve data from file: <detail>` | Failed to read file data to send for scanning | SDK-native |
+| `Internal` (13) | `Received unknown command from server: <n>` (also `Unknown message type received from server`) | Unexpected command / message type from the server | SDK-native |
+| `Internal` (13) | `Failed to write encoded data: <detail>` · `Failed to write decoded data: <detail>` · `Incomplete write: wrote <n> bytes, expected <m>` · `Failed to create destination file: <detail>` | (Encode/Decode) cannot write output or create destination file | SDK-native |
+| `Internal` (13) | `Customer ID not found. Contact Support.` | Account / customer ID not found | Service |
+| `Internal` (13) | `Failed to retrieve metadata. Try again later. If the issue persists, contact Support.` | Could not retrieve request metadata | Service |
+| `Internal` (13) | `Network connection error. Try again later. If the issue persists, contact Support.` | Service-side network / connection error | Service |
+| `Internal` (13) | `Internal error. Try again later. If the issue persists, contact Support.` | Generic internal service error | Service |
+| `Internal` (13) | `This account has performed five scans in the last hour. Purchase and allocate credits to File Security or wait an hour to make five more scans.` | Hourly scan quota exhausted (Essential accounts) | Service |
+| `Internal` (13) | `Too many tags. Decrease to eight tags or less.` | Too many tags (rejected by the service) | Service |
+| `Internal` (13) | `Tag is too long. Decrease length to 63 characters or less.` | A tag is too long (rejected by the service) | Service |
+| `Internal` (13) | `Tag is empty. Remove the tag or add at least one character.` | An empty tag (rejected by the service) | Service |
+| `Internal` (13) | `cloudAccountId contains illegal characters (#, @)` | Illegal characters in the `cloudAccountId` tag | Service |
+| `Internal` (13) | `Prefix format or length of SHA1 from the SDK is incorrect. Contact Support.` | SHA1 prefix format/length incorrect | Service |
+| `Internal` (13) | `SHA1 format from the SDK is incorrect. Contact Support.` | SHA1 format incorrect | Service |
+| `Internal` (13) | `Prefix format or length of SHA256 from the SDK is incorrect. Contact Support.` | SHA256 prefix format/length incorrect | Service |
+| `Internal` (13) | `SHA256 format from the SDK is incorrect. Contact Support.` | SHA256 format incorrect | Service |
+| `Internal` (13) | `file size <n> is over maximum allowed size <m>` | File exceeds the maximum scan size | Service |
+| `Internal` (13) | `Missing preamble information from the SDK. Contact Support.` | Missing preamble information | Service |
+| `Internal` (13) | `Incorrect stage <n> from the SDK. Contact Support.` | Incorrect protocol stage | Service |
+| `Internal` (13) | `Cannot allocate resource. Try again later. If the issue persists, contact Support.` | Could not allocate a scan resource | Service |
+| `Internal` (13) | `Unclear scan result: <detail>. Contact Support.` | Scan result could not be parsed | Service |
+| `Internal` (13) | `Encode: Init message is required` / `Decode: Init message is required` | (Encode/Decode) init message missing | Service |
+| `Internal` (13) | `Encode: Encoding failed: <detail>` / `Decode: Decoding failed: <detail>` | (Encode/Decode) transform failed | Service |
+| `Unavailable` (14) | `Anti-Malware Service is not reachable` | Cannot reach the service (network / connection error) | SDK-native |
+| `Unauthenticated` (16) | `Authorization key cannot be authenticated` | API key missing, invalid, or expired, **or** the service rejected authentication (no/invalid token, or the account lacks file-scan permission) | SDK-mapped |
+| `—` ¹ | `<region> is not a supported region, region value should be one of <list>` | Region is not a supported Vision One region | SDK-native |
+| `—` ¹ | `Cannot parse value specified by environment variable <name>` | Environment-variable value could not be parsed | SDK-native |
+| `—` ¹ | `Unsupported algorithm for calculating the hash: <algorithm>` | Unsupported hash algorithm requested | SDK-native |
+| `—` ¹ | `cloudAccountID tag 'cloudAccountId=<id>' exceeds maximum tag size of <n> characters` | `cloudAccountID` exceeds the maximum tag size | SDK-native |
+| `—` ¹ | `tags cannot be empty` | Tag list is empty (rejected by the SDK before sending) | SDK-native |
+| `—` ¹ | `too many tags, maximum is <n>` | Too many tags (rejected by the SDK before sending) | SDK-native |
+| `—` ¹ | `tag length cannot exceed <n>` | A tag is too long (rejected by the SDK before sending) | SDK-native |
+| `—` ¹ | `each tag cannot be empty` | An individual tag is empty (rejected by the SDK before sending) | SDK-native |
+| `—` ¹ | *(raw OS error, e.g. `open <path>: no such file or directory`)* | File to be scanned cannot be opened | SDK-native |
+
+**Notes**
+
+1. Rows with code `—` are plain Go errors (`errors.New` / `fmt.Errorf`), **not** gRPC status errors — `status.FromError(err)` reports `Unknown`; inspect `err.Error()` instead. They come from `NewClient` / `NewClientWithOptions`, the `WithCloudAccountID` / `SetCloudAccountID` options, client-side tag validation, and file access.
+2. **`Service` messages are owned by the File Security service and may change independently of the SDK**; this table reflects the catalog current at the time of writing. Because the SDK normalizes them to `Internal` (13), several distinct conditions are distinguishable only by their **message text**, not their code.
+3. For `Unauthenticated`, `PermissionDenied`, `Unimplemented`, and `Unknown`, the SDK substitutes its **own** message; the service's more specific reason appears only in server-side logs.
+4. Engine findings such as `ATSE_*` codes are **not** errors — they are returned inside the scan result payload, not as a gRPC status.
 
 ## Usage Examples
 

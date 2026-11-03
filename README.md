@@ -9,9 +9,11 @@ Follow the steps below to set up your development environment and configure your
 
 ## Environment
 
-- Golang 1.19 or newer
+- A Go toolchain. The required Go version is declared in `go.mod`.
 - Trend Vision One account with a chosen region - for more information, see the [Trend Vision One documentation](https://docs.trendmicro.com/en-us/documentation/article/trend-vision-one-trend-micro-xdr-abou_001).
 - A Trend Vision One API key with proper role - for more information, see the [Trend Vision One API key documentation](https://docs.trendmicro.com/en-us/documentation/article/trend-vision-one-api-keys).
+
+Build your binaries with a Go toolchain that includes the crypto/x509 mitigation for the eMudhra/emSign CA compromise (CVE-2026-111943, fixed in Go 1.26.10 and 1.27.3). With the default `GOTOOLCHAIN=auto`, the version declared in `go.mod` selects a patched toolchain automatically.
 
 ## Installation
 
@@ -167,6 +169,8 @@ if err != nil {
 - Max number of tags is 8. And the length of each tag can't exceed 63.
 - If user wants to take a look how to scan a S3 file without downloading the whole to the ground,
   please refer to the [example code](examples/scan-s3obj/scan-s3obj.go) for further detail.
+- If user wants to take a look how to scan an Azure blob without downloading the whole to the ground,
+  please refer to the [example code](examples/scan-azureblob/scan-azureblob.go) for further detail.
 
 ## Additional Functions
 

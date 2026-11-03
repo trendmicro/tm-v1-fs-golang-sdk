@@ -25,7 +25,7 @@ import (
 */
 
 type ScanResult struct {
-	Id         string    `json:"id"`
+	ID         string    `json:"id"`
 	StartTime  time.Time `json:"scan_starttime"`
 	EndTime    time.Time `json:"scan_endtime"`
 	Test       string    `json:"test"`
@@ -41,7 +41,6 @@ type OverallTestResult struct {
 }
 
 func main() {
-
 	var scanGoodFiles bool
 	var scanInParallel bool
 	var path string
@@ -170,7 +169,6 @@ func main() {
 }
 
 func scanFileListInSequence(fileList []string, scanGoodFiles bool, scanner *amaasclient.AmaasClient, tags []string) OverallTestResult {
-
 	var tr OverallTestResult
 	tr.Passed = true
 	tr.StartTime = time.Now()
@@ -180,7 +178,7 @@ func scanFileListInSequence(fileList []string, scanGoodFiles bool, scanner *amaa
 		log.Printf("Scanning file %s ...\n", filename)
 
 		var sr ScanResult
-		sr.Id = hash(filename)
+		sr.ID = hash(filename)
 
 		sr.StartTime = time.Now()
 
@@ -205,7 +203,6 @@ func scanFileListInSequence(fileList []string, scanGoodFiles bool, scanner *amaa
 }
 
 func scanFileListInParallel(fileList []string, scanGoodFiles bool, scanner *amaasclient.AmaasClient, tags []string) OverallTestResult {
-
 	var tr OverallTestResult
 	tr.Passed = true
 	tr.StartTime = time.Now()
@@ -219,7 +216,7 @@ func scanFileListInParallel(fileList []string, scanGoodFiles bool, scanner *amaa
 			log.Printf("Scanning file %s ...\n", f)
 
 			var sr ScanResult
-			sr.Id = hash(f)
+			sr.ID = hash(f)
 
 			sr.StartTime = time.Now()
 

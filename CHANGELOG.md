@@ -1,86 +1,91 @@
 # CHANGELOG
 
+## 1.7.3 - 2026-11-03
+
+- Add an Azure blob scan example (`examples/scan-azureblob`)
+- Build with Go 1.27.3 which includes the crypto/x509 mitigation for the eMudhra/emSign CA compromise (CVE-2026-111943); see the note in README.md
+
 ## 1.7.2 - 2026-08-10
 
-* Support new region ap-southeast-3 (Indonesia)
-* Support scan gateway for FSCS and FSVA
-* Add an Error Handling section to the README documenting SDK and service error codes and messages
-* Upgrade gRPC and other dependencies
-* Fix CVE-2026-24051, CVE-2026-29181, and CVE-2026-39883
+- Support new region ap-southeast-3 (Indonesia)
+- Support scan gateway for FSCS and FSVA
+- Add an Error Handling section to the README documenting SDK and service error codes and messages
+- Upgrade gRPC and other dependencies
+- Fix CVE-2026-24051, CVE-2026-29181, and CVE-2026-39883
 
 ## 1.7.1 - 2026-04-13
 
-* Support new region af-south-1
-* Support directly connect to Vision One FQDN
-* Fix timeout issue
+- Support new region af-south-1
+- Support directly connect to Vision One FQDN
+- Fix timeout issue
 
 ## 1.7.0 - 2026-01-19
 
-* Add `EncodeFile`, `EncodeReader`, `DecodeFile`, `DecodeReader` functions for quarantining malicious files
-* Support new regions: eu-west-2 (UK), ca-central-1 (Canada)
+- Add `EncodeFile`, `EncodeReader`, `DecodeFile`, `DecodeReader` functions for quarantining malicious files
+- Support new regions: eu-west-2 (UK), ca-central-1 (Canada)
 
 ## 1.6.1 - 2025-09-11
 
-* Add customized cloud account id setting via `SetCloudAccountID` function
+- Add customized cloud account id setting via `SetCloudAccountID` function
 
 ## 1.6.0 - 2025-06-30
 
-* Add active content detection support via `SetActiveContentEnable` function
+- Add active content detection support via `SetActiveContentEnable` function
 
 ## 1.5.1 - 2025-03-03
 
-* Support new region me-central-1
-* Fix CVE-2023-45288
+- Support new region me-central-1
+- Fix CVE-2023-45288
 
 ## 1.5.0 - 2024-12-16
 
-* Add `ScanReader` for scanning a well-implemented `AmaasClientReader`
-* Add example code `scan-s3obj` for scanning an S3 object which is an example of using `ScanReader`
+- Add `ScanReader` for scanning a well-implemented `AmaasClientReader`
+- Add example code `scan-s3obj` for scanning an S3 object which is an example of using `ScanReader`
 
 ## 1.4.2 - 2024-08-30
 
-* Fixed the issue of the TLS parameter being overwritten
+- Fixed the issue of the TLS parameter being overwritten
 
 ## 1.4.1 - 2024-08-27
 
-* Support certificate verification bypass using environment variable
+- Support certificate verification bypass using environment variable
 
 ## 1.4.0 - 2024-08-21
 
-* Support digest calculation bypass
+- Support digest calculation bypass
 
 ## 1.3.0 - 2024-08-19
 
-* Update README.md
-* Support CA cert import
+- Update README.md
+- Support CA cert import
 
 ## 1.2.0 - 2024-07-05
 
-* Support verbose scan result
+- Support verbose scan result
 
 ## 1.1.2 - 2024-04-10
 
-* Update README.md
-* Extend default timeout to 300s
+- Update README.md
+- Extend default timeout to 300s
 
 ## 1.1.1 - 2024-04-04
 
-* Fix bug in SPN smart feedback
-* Add tag flag to example tools
+- Fix bug in SPN smart feedback
+- Add tag flag to example tools
 
 ## 1.1.0 - 2024-04-03
 
-* Update protos
-* Enable PML (Predictive Machine Learning) detection and smart feedback
-* Enable bulk mode
-* Enable India region
-* Support for scanning large files (over 2GB)
-* Support socks5 proxy
+- Update protos
+- Enable PML (Predictive Machine Learning) detection and smart feedback
+- Enable bulk mode
+- Enable India region
+- Support for scanning large files (over 2GB)
+- Support socks5 proxy
 
 ## 1.0.1 - 2023-11-21
 
-* Fix sha1 issue
+- Fix sha1 issue
 
 ## 1.0.0 - 2023-11-17
 
-* Update to latest version
+- Update to latest version

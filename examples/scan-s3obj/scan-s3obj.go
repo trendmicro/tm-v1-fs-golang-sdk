@@ -7,39 +7,41 @@ It will return an array of AMaaS scan results as part of its JSON output.
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log"
-	"os"
 	"strings"
-
-	amaasclient "github.com/trendmicro/tm-v1-fs-golang-sdk"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+
+	amaasclient "github.com/trendmicro/tm-v1-fs-golang-sdk"
 )
 
 func main() {
+	var (
+		bucketRegion string
+		bucket       string
+		key          string
 
-	var bucketregion string
-	var bucket string
-	var key string
+		grpcAddr string
+		apiKey   string
+		tls      bool
+		caCert   string
+		region   string
+		pml      bool
+		feedback bool
+		verbose  bool
 
-	var grpcAddr string
-	var apiKey string
-	var tls bool
-	var caCert string
-	var region string
-	var pml bool
-	var feedback bool
-	var verbose bool
-	var activeContent bool
-	var tag string
-	var digest bool
+		activeContent bool
+		tag           string
+		digest        bool
+	)
 
-	flag.StringVar(&bucketregion, "bucketregion", "us-west-2", "region for S3 bucket")
+	flag.StringVar(&bucketRegion, "bucketregion", "us-west-2", "region for S3 bucket")
 	flag.StringVar(&bucket, "bucket", "", "S3 bucket name")
 	flag.StringVar(&key, "key", "", "S3 object key")
 
@@ -57,23 +59,9 @@ func main() {
 
 	flag.Parse()
 
-	var ac *amaasclient.AmaasClient
-	var err error
-
-	if region != "" && grpcAddr != "" {
-		log.Fatal("Both region and addr are specified. Please specify only one.")
-	} else if region != "" {
-		ac, err = amaasclient.NewClient(apiKey, region)
-		if err != nil {
-			log.Fatalf("Unable to create AMaaS scan client object. error: %v", err)
-		}
-	} else if grpcAddr != "" {
-		ac, err = amaasclient.NewClientInternal(apiKey, grpcAddr, tls, caCert)
-		if err != nil {
-			log.Fatalf("Unable to create AMaaS scan client object. error: %v", err)
-		}
-	} else {
-		log.Fatal("Neither region nor addr is specified. Please specify one.")
+	ac, err := newScanClient(apiKey, region, grpcAddr, caCert, tls)
+	if err != nil {
+		log.Fatalf("Unable to create AMaaS scan client object. error: %v", err)
 	}
 
 	if pml {
@@ -97,24 +85,37 @@ func main() {
 		ac.SetDigestDisable()
 	}
 
-	var tagsArray []string
+	var tags []string
 	if tag != "" {
-		tagsArray = strings.Split(tag, ",")
+		tags = strings.Split(tag, ",")
 	}
 
-	reader, err := NewS3ClientReader(context.Background(), bucketregion, bucket, key)
+	reader, err := NewS3ClientReader(context.Background(), bucketRegion, bucket, key)
 	if err != nil {
 		log.Fatalf("Unable to create S3 client reader. error: %v", err)
 	}
 
-	result, err := ac.ScanReader(reader, tagsArray)
+	result, err := ac.ScanReader(reader, tags)
 	if err != nil {
 		log.Fatalf("Unable to scan reader. error: %v", err)
 	}
 
 	fmt.Printf("%v", result)
+}
 
-	os.Exit(0)
+// newScanClient creates the scan client from either a File Security region or
+// a self hosted gRPC address; the two are mutually exclusive.
+func newScanClient(apiKey, region, addr, caCert string, tls bool) (*amaasclient.AmaasClient, error) {
+	switch {
+	case region != "" && addr != "":
+		return nil, errors.New("both region and addr are specified. please specify only one")
+	case region != "":
+		return amaasclient.NewClient(apiKey, region)
+	case addr != "":
+		return amaasclient.NewClientInternal(apiKey, addr, tls, caCert)
+	default:
+		return nil, errors.New("neither region nor addr is specified. please specify one")
+	}
 }
 
 type S3ClientReader struct {
@@ -124,15 +125,12 @@ type S3ClientReader struct {
 	size   int64
 }
 
-func NewS3ClientReader(ctx context.Context, bucketregion, bucket, key string) (*S3ClientReader, error) {
-	// load default config from environment with specified region
-	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(bucketregion))
+func NewS3ClientReader(ctx context.Context, bucketRegion, bucket, key string) (*S3ClientReader, error) {
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(bucketRegion))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load AWS config: %w", err)
 	}
-	defer ctx.Done()
 
-	// create S3 client with given config
 	client := s3.NewFromConfig(cfg)
 
 	attr, err := client.GetObjectAttributes(ctx, &s3.GetObjectAttributesInput{
@@ -143,11 +141,11 @@ func NewS3ClientReader(ctx context.Context, bucketregion, bucket, key string) (*
 		},
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get object attributes: %w", err)
 	}
 
 	if attr.ObjectSize == nil {
-		return nil, fmt.Errorf("unable to get object size from S3")
+		return nil, errors.New("unable to get object size from S3")
 	}
 
 	return &S3ClientReader{
@@ -158,7 +156,7 @@ func NewS3ClientReader(ctx context.Context, bucketregion, bucket, key string) (*
 	}, nil
 }
 
-// S3ClientReader implements AmaasClientReader
+// S3ClientReader implements [amaasclient.AmaasClientReader].
 func (r *S3ClientReader) Identifier() string {
 	return fmt.Sprintf("s3://%s/%s", r.bucket, r.key)
 }
@@ -167,8 +165,8 @@ func (r *S3ClientReader) DataSize() (int64, error) {
 	return r.size, nil
 }
 
-func (r *S3ClientReader) ReadBytes(offset int64, length int32) ([]byte, error) {
-	var rng string = fmt.Sprintf("bytes=%d-%d", offset, offset+int64(length)-1)
+func (r *S3ClientReader) ReadBytes(offset int64, length int32) (data []byte, err error) {
+	rng := fmt.Sprintf("bytes=%d-%d", offset, offset+int64(length)-1)
 
 	output, err := r.client.GetObject(context.Background(), &s3.GetObjectInput{
 		Bucket: &r.bucket,
@@ -176,14 +174,14 @@ func (r *S3ClientReader) ReadBytes(offset int64, length int32) ([]byte, error) {
 		Range:  &rng,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get object: %w", err)
 	}
 	defer output.Body.Close()
 
-	bytes, err := io.ReadAll(output.Body)
-	if err != nil && err != io.EOF {
-		return nil, fmt.Errorf("error reading S3 object body: %v", err)
+	data, err = io.ReadAll(output.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error reading S3 object body: %w", err)
 	}
 
-	return bytes, err
+	return data, nil
 }
